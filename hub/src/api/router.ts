@@ -13,8 +13,10 @@ export function createApiRouter(db: Database.Database): Router {
   });
 
   router.get('/sessions', (req, res) => {
-    const limit  = Math.min(parseInt(String(req.query.limit  ?? '50'), 10), 200);
-    const offset = Math.max(parseInt(String(req.query.offset ?? '0'),  10), 0);
+    const rawLimit  = parseInt(String(req.query.limit  ?? '50'), 10);
+    const rawOffset = parseInt(String(req.query.offset ?? '0'),  10);
+    const limit  = Math.min(isNaN(rawLimit)  ? 50  : rawLimit,  200);
+    const offset = Math.max(isNaN(rawOffset) ? 0   : rawOffset, 0);
     res.json(getSessions(db, limit, offset));
   });
 
@@ -33,7 +35,8 @@ export function createApiRouter(db: Database.Database): Router {
   });
 
   router.get('/cost/by-day', (req, res) => {
-    const days = Math.min(parseInt(String(req.query.days ?? '30'), 10), 365);
+    const rawDays = parseInt(String(req.query.days ?? '30'), 10);
+    const days = Math.min(isNaN(rawDays) ? 30 : rawDays, 365);
     res.json(getCostByDay(db, days));
   });
 
