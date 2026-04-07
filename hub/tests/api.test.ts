@@ -28,7 +28,9 @@ beforeAll(() => {
   app.use('/api', createApiRouter(db));
 });
 
-afterAll(() => db.close());
+afterAll(() => {
+  db.close();
+});
 
 describe('GET /api/summary', () => {
   it('returns overview stats', async () => {

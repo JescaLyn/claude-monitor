@@ -1,0 +1,18 @@
+[Unit]
+Description=Claude Monitor Hub
+After=network.target
+
+[Service]
+Type=simple
+User=jessica
+WorkingDirectory=/home/jessica/claude-monitor/hub
+ExecStart=/usr/bin/node --import tsx/esm src/index.ts
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=DB_PATH=/home/jessica/claude-monitor/data/monitor.db
+Environment=OTLP_PORT=4318
+Environment=API_PORT=3001
+
+[Install]
+WantedBy=multi-user.target
