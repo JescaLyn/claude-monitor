@@ -101,3 +101,15 @@ describe('GET /api/cost/by-machine', () => {
     expect(res.body[0].machine_id).toBe('test-machine');
   });
 });
+
+describe('GET /api/cost/by-day', () => {
+  it('returns cost grouped by day', async () => {
+    const res = await supertest(app).get('/api/cost/by-day');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    // The sample data has 1 api_request, so we expect 1 day entry
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].cost_usd).toBeCloseTo(0.01267155);
+    expect(res.body[0].api_request_count).toBe(1);
+  });
+});
