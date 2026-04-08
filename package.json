@@ -1,0 +1,10 @@
+{
+  "name": "claude-monitor",
+  "private": true,
+  "scripts": {
+    "start": "npm start --prefix hub",
+    "service:load": "launchctl load ~/Library/LaunchAgents/com.example.claude-monitor.plist",
+    "service:unload": "launchctl unload ~/Library/LaunchAgents/com.example.claude-monitor.plist",
+    "service:restart": "npm run service:unload && npm run service:load"
+  }
+}

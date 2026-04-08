@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { ParsedLogPayload, NormalizedMetricSnapshot } from './types.js';
+import { resolveSessionName } from './session-names.js';
 
 export function ingestLogPayload(db: Database.Database, parsed: ParsedLogPayload): void {
   const upsertMachine = db.prepare(`
@@ -49,8 +50,14 @@ export function ingestLogPayload(db: Database.Database, parsed: ParsedLogPayload
       upsertMachine.run(machineId, now, now);
     }
 
+    const setAutoName = db.prepare('UPDATE sessions SET name = ? WHERE id = ? AND name IS NULL');
+
     for (const s of parsed.sessions) {
       upsertSession.run(s.id, s.machineId, s.model, s.startedAt);
+      const autoName = resolveSessionName(s.id);
+      if (autoName) {
+        setAutoName.run(autoName, s.id);
+      }
     }
 
     for (const req of parsed.apiRequests) {

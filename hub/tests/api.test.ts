@@ -50,6 +50,70 @@ describe('GET /api/sessions', () => {
     expect(res.body).toHaveLength(1);
     expect(res.body[0].id).toBe('bf9aefc7-1d4c-4385-b5df-bd161e0c1ded');
   });
+
+  it('returns a name field on each session row (may be null)', async () => {
+    const res = await supertest(app).get('/api/sessions');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    if (res.body.length > 0) {
+      expect(res.body[0]).toHaveProperty('name');
+    }
+  });
+});
+
+describe('GET /api/sessions sort params', () => {
+  it('accepts valid sort field', async () => {
+    const res = await supertest(app).get('/api/sessions?sort=cost_usd&order=asc');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('returns 400 for invalid sort field', async () => {
+    const res = await supertest(app).get('/api/sessions?sort=invalid_field');
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for invalid order', async () => {
+    const res = await supertest(app).get('/api/sessions?order=sideways');
+    expect(res.status).toBe(400);
+  });
+
+  it.each(['started_at', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count'])(
+    'accepts sort=%s', async (field) => {
+      const res = await supertest(app).get(`/api/sessions?sort=${field}`);
+      expect(res.status).toBe(200);
+    }
+  );
+});
+
+describe('PUT /api/sessions/:id', () => {
+  const KNOWN_SESSION_ID = 'bf9aefc7-1d4c-4385-b5df-bd161e0c1ded';
+
+  it('returns 400 if name is not a string', async () => {
+    const res = await supertest(app)
+      .put('/api/sessions/any-id')
+      .send({ name: 123 });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for unknown session id', async () => {
+    const res = await supertest(app)
+      .put('/api/sessions/unknown-session-id-xyz')
+      .send({ name: 'My Session' });
+    expect(res.status).toBe(404);
+  });
+
+  it('sets session name and returns ok', async () => {
+    const res = await supertest(app)
+      .put(`/api/sessions/${KNOWN_SESSION_ID}`)
+      .send({ name: 'test-name' });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+
+    const getRes = await supertest(app).get('/api/sessions');
+    const session = getRes.body.find((s: { id: string }) => s.id === KNOWN_SESSION_ID);
+    expect(session?.name).toBe('test-name');
+  });
 });
 
 describe('GET /api/sessions/:id', () => {

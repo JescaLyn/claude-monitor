@@ -13,6 +13,7 @@ export interface OverviewStats {
 export interface SessionRow {
   id: string;
   machine_id: string;
+  name: string | null;
   model: string | null;
   started_at: number;
   ended_at: number | null;
@@ -72,10 +73,32 @@ export function getOverview(db: Database.Database): OverviewStats {
   `).get() as OverviewStats;
 }
 
-export function getSessions(db: Database.Database, limit = 50, offset = 0): SessionRow[] {
+const VALID_SORT_FIELDS = new Set(['started_at', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count']);
+const VALID_ORDERS = new Set(['asc', 'desc']);
+
+// Qualify table-column sorts with alias to avoid ambiguity in the JOIN query.
+// Aggregate alias columns (tool_call_count, api_request_count) are referenced by alias.
+const SORT_EXPR: Record<string, string> = {
+  started_at:        's.started_at',
+  cost_usd:          's.cost_usd',
+  machine_id:        's.machine_id',
+  tool_call_count:   'tool_call_count',
+  api_request_count: 'api_request_count',
+};
+
+export function getSessions(
+  db: Database.Database,
+  limit = 50,
+  offset = 0,
+  sort = 'started_at',
+  order = 'desc'
+): SessionRow[] {
+  if (!VALID_SORT_FIELDS.has(sort)) throw new Error(`Invalid sort field: ${sort}`);
+  if (!VALID_ORDERS.has(order)) throw new Error(`Invalid order: ${order}`);
+  const sortExpr = SORT_EXPR[sort];
   return db.prepare(`
     SELECT
-      s.id, s.machine_id, s.model, s.started_at, s.ended_at,
+      s.id, s.machine_id, s.name, s.model, s.started_at, s.ended_at,
       s.cost_usd, s.input_tokens, s.output_tokens,
       s.cache_read_tokens, s.cache_creation_tokens,
       COUNT(DISTINCT ar.id) AS api_request_count,
@@ -84,7 +107,7 @@ export function getSessions(db: Database.Database, limit = 50, offset = 0): Sess
     LEFT JOIN api_requests ar ON ar.session_id = s.id
     LEFT JOIN tool_events   te ON te.session_id = s.id
     GROUP BY s.id
-    ORDER BY s.started_at DESC
+    ORDER BY ${sortExpr} ${order}
     LIMIT ? OFFSET ?
   `).all(limit, offset) as SessionRow[];
 }
@@ -92,7 +115,7 @@ export function getSessions(db: Database.Database, limit = 50, offset = 0): Sess
 export function getSession(db: Database.Database, id: string): SessionRow | null {
   return db.prepare(`
     SELECT
-      s.id, s.machine_id, s.model, s.started_at, s.ended_at,
+      s.id, s.machine_id, s.name, s.model, s.started_at, s.ended_at,
       s.cost_usd, s.input_tokens, s.output_tokens,
       s.cache_read_tokens, s.cache_creation_tokens,
       COUNT(DISTINCT ar.id) AS api_request_count,
@@ -103,6 +126,12 @@ export function getSession(db: Database.Database, id: string): SessionRow | null
     WHERE s.id = ?
     GROUP BY s.id
   `).get(id) as SessionRow | null;
+}
+
+export function setSessionName(db: Database.Database, id: string, name: string): boolean {
+  const stmt = db.prepare('UPDATE sessions SET name = ? WHERE id = ?');
+  const result = stmt.run(name, id);
+  return result.changes > 0;
 }
 
 export function getToolStats(db: Database.Database): ToolStat[] {

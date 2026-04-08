@@ -68,4 +68,7 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_sessions_machine ON sessions(machine_id);
   CREATE INDEX IF NOT EXISTS idx_metric_snapshots_session ON metric_snapshots(session_id);
   `,
+
+  // Migration 1: add human-readable name to sessions
+  `ALTER TABLE sessions ADD COLUMN name TEXT;`,
 ];
