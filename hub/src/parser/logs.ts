@@ -49,13 +49,45 @@ export function parseLogsPayload(payload: OtelLogsPayload, machineId: string): P
 
         } else if (eventName === 'tool_result') {
           const successStr = attrStr(attrs, 'success');
-          const skillName = attrStr(attrs, 'skill_name') || null;
+          const toolName = attrStr(attrs, 'tool_name');
           const durationMs = attrNum(attrs, 'duration_ms') || null;
           const success = successStr === 'true' ? 1 : successStr === 'false' ? 0 : null;
 
+          // Extract skill name from Skill tool invocations
+          let skillName: string | null = null;
+          if (toolName === 'Skill') {
+            // Try tool_parameters first
+            try {
+              const toolParams = attrStr(attrs, 'tool_parameters');
+              if (toolParams) {
+                const params = JSON.parse(toolParams) as Record<string, unknown>;
+                if (typeof params.skill === 'string') {
+                  skillName = params.skill;
+                }
+              }
+            } catch (e) {
+              // skip parsing errors
+            }
+
+            // Fall back to looking for skill in tool_input
+            if (!skillName) {
+              try {
+                const toolInput = attrStr(attrs, 'tool_input');
+                if (toolInput) {
+                  const input = JSON.parse(toolInput) as Record<string, unknown>;
+                  if (typeof input.skill === 'string') {
+                    skillName = input.skill;
+                  }
+                }
+              } catch {
+                // skip parsing errors
+              }
+            }
+          }
+
           toolEvents.push({
             sessionId, ts, promptId,
-            toolName: attrStr(attrs, 'tool_name'),
+            toolName,
             skillName, durationMs, success, machineId,
             eventSequence: sequence,
           });

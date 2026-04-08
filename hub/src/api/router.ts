@@ -13,8 +13,11 @@ function enrichSessionWithName(session: SessionRow): SessionRow {
   if (!session.name) {
     // Only resolve if not already set (allows user overrides via PUT to persist)
     const resolvedName = resolveSessionName(session.id);
+    // Use resolved name if found, otherwise fall back to session ID
     if (resolvedName) {
       return { ...session, name: resolvedName };
+    } else {
+      return { ...session, name: session.id };
     }
   }
   return session;

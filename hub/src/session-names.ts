@@ -2,26 +2,24 @@ import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-const cache = new Map<string, string | null>();
+const cache = new Map<string, { name: string | null; timestamp: number }>();
+const CACHE_DURATION_MS = 5000; // Refresh every 5 seconds
 
 export function resolveSessionName(
   sessionId: string,
   baseDir: string = join(homedir(), '.claude', 'projects'),
   sessionsDir: string = join(homedir(), '.claude', 'sessions')
 ): string | null {
-  if (cache.has(sessionId)) return cache.get(sessionId) ?? null;
+  const now = Date.now();
+  const cached = cache.get(sessionId);
+  if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
+    return cached.name;
+  }
 
   // First, try to find user-set name in ~/.claude/sessions/*.json
   const userSetName = findUserSetName(sessionId, sessionsDir);
-  if (userSetName) {
-    cache.set(sessionId, userSetName);
-    return userSetName;
-  }
-
-  // Fall back to auto-generated slug from JSONL
-  const slug = findSlug(sessionId, baseDir);
-  cache.set(sessionId, slug);
-  return slug;
+  cache.set(sessionId, { name: userSetName ?? null, timestamp: now });
+  return userSetName ?? null;
 }
 
 export function clearSessionNameCache(): void {

@@ -11,9 +11,9 @@ describe('resolveSessionName', () => {
     clearSessionNameCache();
   });
 
-  it('returns slug for a known session', () => {
+  it('returns null when no user-set name exists', () => {
     const result = resolveSessionName('test-session-id', FIXTURES_DIR);
-    expect(result).toBe('jazzy-swimming-rocket');
+    expect(result).toBeNull();
   });
 
   it('returns null for unknown session', () => {
@@ -21,10 +21,10 @@ describe('resolveSessionName', () => {
     expect(result).toBeNull();
   });
 
-  it('caches the result on second call', () => {
+  it('caches the null result on second call', () => {
     resolveSessionName('test-session-id', FIXTURES_DIR);
     const result = resolveSessionName('test-session-id', FIXTURES_DIR);
-    expect(result).toBe('jazzy-swimming-rocket');
+    expect(result).toBeNull();
   });
 
   it('caches null result', () => {
@@ -38,8 +38,8 @@ describe('resolveSessionName', () => {
     expect(result).toBe('claude-monitor-build');
   });
 
-  it('falls back to slug when no user-set name', () => {
+  it('returns null when no user-set name in sessions dir', () => {
     const result = resolveSessionName('test-session-id', FIXTURES_DIR, SESSIONS_DIR);
-    expect(result).toBe('jazzy-swimming-rocket');
+    expect(result).toBeNull();
   });
 });
