@@ -1,4 +1,4 @@
-import { get, fmt$, fmtTokens } from '../utils.js';
+import { get, fmt$, fmtTokens, fmtDate } from '../utils.js';
 
 export async function render(el) {
   // Fetch all available sessions and current selection
@@ -85,6 +85,23 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
     await renderSummaryCards(summaryCardsEl, skillCosts, subagentCosts, apiRequests);
   }
 
+  // Initialize tab panels and render Skills tab by default
+  const tabPanelsEl = document.getElementById('tab-panels');
+  if (tabPanelsEl) {
+    // Create tab panels for each section
+    tabPanelsEl.innerHTML = `
+      <div id="skills-panel" class="tab-panel active"></div>
+      <div id="agents-panel" class="tab-panel"></div>
+      <div id="requests-panel" class="tab-panel"></div>
+    `;
+
+    // Render Skills tab by default
+    const skillsPanel = document.getElementById('skills-panel');
+    if (skillsPanel) {
+      await renderSkillsTab(skillsPanel, skillCosts);
+    }
+  }
+
   // Attach event listeners for session change and tab switching
   document.getElementById('session-select')?.addEventListener('change', (e) => {
     const newSessionId = e.target.value;
@@ -95,8 +112,80 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
     btn.addEventListener('click', (e) => {
       const tabName = e.target.dataset.tab;
       if (tabName) {
-        // Tab switching logic will be implemented in future tasks
-        console.log('Tab:', tabName);
+        // Hide all panels and deactivate all tabs
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+        document.querySelectorAll('.section-tab').forEach(tab => tab.classList.remove('active'));
+
+        // Show selected panel and activate tab
+        const panelId = `${tabName}-panel`;
+        const panel = document.getElementById(panelId);
+        if (panel) {
+          panel.classList.add('active');
+          e.target.classList.add('active');
+
+          // Render content based on selected tab
+          if (tabName === 'skills') {
+            renderSkillsTab(panel, skillCosts);
+          } else if (tabName === 'agents') {
+            // Agent tab rendering will be implemented in next task
+            panel.innerHTML = '<p class="placeholder">Agent costs coming soon...</p>';
+          } else if (tabName === 'requests') {
+            // API requests tab rendering will be implemented in next task
+            panel.innerHTML = '<p class="placeholder">API request details coming soon...</p>';
+          }
+        }
+      }
+    });
+  });
+}
+
+/**
+ * Render the Skills sub-tab with a table of skills and expandable detail rows
+ * @param {HTMLElement} el - Container to render into
+ * @param {Array} skillCosts - Array of skill cost objects
+ */
+export async function renderSkillsTab(el, skillCosts) {
+  const html = `
+    <table class="skills-table">
+      <thead>
+        <tr>
+          <th>Skill</th>
+          <th>Cost</th>
+          <th>Tokens</th>
+          <th>Calls</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${skillCosts.map(skill => `
+          <tr class="skill-row" data-skill="${skill.skillName}">
+            <td>${skill.skillName}</td>
+            <td>${fmt$(skill.totalCost)}</td>
+            <td>${fmtTokens(skill.totalTokens)}</td>
+            <td>${skill.callCount}</td>
+          </tr>
+          <tr class="skill-detail" style="display: none;">
+            <td colspan="4">
+              <div class="detail-panel">
+                <div><strong>Time Window:</strong> ${skill.timeWindow || 'N/A'}</div>
+                <div><strong>Context Tokens:</strong> ${fmtTokens(skill.contextTokens || 0)}</div>
+                <div><strong>Models:</strong> ${skill.models?.join(', ') || 'N/A'}</div>
+                <div><strong>Cost:</strong> ${fmt$(skill.detailCost || skill.totalCost)}</div>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  el.innerHTML = html;
+
+  // Add click handlers for expand/collapse
+  el.querySelectorAll('.skill-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      const detailRow = row.nextElementSibling;
+      if (detailRow && detailRow.classList.contains('skill-detail')) {
+        detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
       }
     });
   });

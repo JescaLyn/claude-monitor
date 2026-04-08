@@ -142,6 +142,98 @@ async function testEmptyDataHandling() {
 }
 
 /**
+ * Test: renderSkillsTab creates table with correct structure
+ */
+async function testSkillsTabStructure() {
+  const { renderSkillsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockSkillCosts = [
+    { skillName: 'Git Helper', totalCost: 0.15, totalTokens: 5000, callCount: 10, timeWindow: 'last 7d', contextTokens: 500, models: ['claude-opus'] },
+    { skillName: 'Code Review', totalCost: 0.25, totalTokens: 8000, callCount: 5, timeWindow: 'last 24h', contextTokens: 800, models: ['claude-sonnet'] }
+  ];
+
+  await renderSkillsTab(container, mockSkillCosts);
+
+  // Verify table structure
+  const table = container.querySelector('.skills-table');
+  assert(table, 'Table with class skills-table not found');
+
+  // Verify header
+  const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent);
+  const expectedHeaders = ['Skill', 'Cost', 'Tokens', 'Calls'];
+  assert(headers.length === 4, `Expected 4 headers, got ${headers.length}`);
+  expectedHeaders.forEach((expected, idx) => {
+    assert(headers[idx] === expected, `Expected header "${expected}", got "${headers[idx]}"`);
+  });
+
+  // Verify rows
+  const skillRows = container.querySelectorAll('tbody tr.skill-row');
+  assert(skillRows.length === 2, `Expected 2 skill rows, got ${skillRows.length}`);
+
+  console.log('✓ testSkillsTabStructure: table structure correct');
+}
+
+/**
+ * Test: renderSkillsTab expandable rows
+ */
+async function testSkillsTabExpandable() {
+  const { renderSkillsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockSkillCosts = [
+    { skillName: 'Test Skill', totalCost: 0.1, totalTokens: 1000, callCount: 1, timeWindow: 'last 24h', contextTokens: 100, models: ['claude-opus'] }
+  ];
+
+  await renderSkillsTab(container, mockSkillCosts);
+
+  // Find the skill row
+  const skillRow = container.querySelector('tbody tr.skill-row');
+  assert(skillRow, 'Skill row not found');
+
+  // Find the detail row
+  const detailRow = skillRow.nextElementSibling;
+  assert(detailRow && detailRow.classList.contains('skill-detail'), 'Detail row not found');
+
+  // Detail row should start hidden
+  assert(detailRow.style.display === 'none', `Expected detail row to be hidden, got display="${detailRow.style.display}"`);
+
+  // Simulate click
+  skillRow.click();
+
+  // After click, detail row should be visible
+  assert(detailRow.style.display !== 'none', `Expected detail row to be visible after click, got display="${detailRow.style.display}"`);
+
+  console.log('✓ testSkillsTabExpandable: expandable rows work correctly');
+}
+
+/**
+ * Test: renderSkillsTab formats data correctly
+ */
+async function testSkillsTabFormatting() {
+  const { renderSkillsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockSkillCosts = [
+    { skillName: 'Git Helper', totalCost: 0.15, totalTokens: 5000, callCount: 10 }
+  ];
+
+  await renderSkillsTab(container, mockSkillCosts);
+
+  // Verify cell content
+  const cells = container.querySelectorAll('tbody tr.skill-row td');
+  assert(cells[0].textContent === 'Git Helper', `Expected "Git Helper", got "${cells[0].textContent}"`);
+  assert(cells[1].textContent.includes('$'), `Expected cost to include $, got "${cells[1].textContent}"`);
+  assert(cells[2].textContent.match(/\d+K?/), `Expected tokens formatted, got "${cells[2].textContent}"`);
+  assert(cells[3].textContent === '10', `Expected call count "10", got "${cells[3].textContent}"`);
+
+  console.log('✓ testSkillsTabFormatting: data formatted correctly');
+}
+
+/**
  * Helper: simple assertion
  */
 function assert(condition, message) {
@@ -154,13 +246,19 @@ function assert(condition, message) {
  * Run all tests
  */
 async function runTests() {
-  console.log('Running cost-analysis summary cards tests...\n');
+  console.log('Running cost-analysis tests...\n');
 
   try {
+    console.log('--- Summary Cards Tests ---');
     await testSummaryCardsCount();
     await testCardLabels();
     await testCardValueFormatting();
     await testEmptyDataHandling();
+
+    console.log('\n--- Skills Tab Tests ---');
+    await testSkillsTabStructure();
+    await testSkillsTabExpandable();
+    await testSkillsTabFormatting();
 
     console.log('\n✅ All tests passed');
     process.exit(0);
