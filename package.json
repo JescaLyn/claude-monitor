@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "npm start --prefix hub",
+    "test": "node test/dashboard/app-integration.test.js && node test/dashboard/cost-analysis.test.js",
     "service:load": "launchctl load ~/Library/LaunchAgents/com.example.claude-monitor.plist",
     "service:unload": "launchctl unload ~/Library/LaunchAgents/com.example.claude-monitor.plist",
     "service:restart": "npm run service:unload && npm run service:load"

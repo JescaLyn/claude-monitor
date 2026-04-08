@@ -3,9 +3,7 @@ import { render as renderSessions } from '/tabs/sessions.js';
 import { render as renderCost }     from '/tabs/cost.js';
 import { render as renderSkills }   from '/tabs/skills.js';
 import { render as renderTools }    from '/tabs/tools.js';
-import * as skillsCostTab from '/tabs/skills-cost.js';
-import * as subagentsCostTab from '/tabs/subagents-cost.js';
-import * as apiRequestsTab from '/tabs/api-requests.js';
+import { render as renderCostAnalysis } from '/tabs/cost-analysis.js';
 
 const TABS = {
   overview: renderOverview,
@@ -13,9 +11,7 @@ const TABS = {
   cost:     renderCost,
   skills:   renderSkills,
   tools:    renderTools,
-  skillsCost: skillsCostTab.render,
-  subagentsCost: subagentsCostTab.render,
-  apiRequests: apiRequestsTab.render,
+  'cost-analysis': renderCostAnalysis,
 };
 
 const content = document.getElementById('content');
