@@ -1,4 +1,4 @@
-import { get, fmt$ } from '/utils.js';
+import { get, fmt$, fmtTokens } from '/utils.js';
 
 export async function render(el) {
   // Fetch all available sessions and current selection
@@ -79,6 +79,12 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
   // This will be refactored into a closure in later tasks
   window.costAnalysisData = { skillCosts, subagentCosts, apiRequests, sessionId };
 
+  // Render summary cards
+  const summaryCardsEl = document.getElementById('summary-cards');
+  if (summaryCardsEl) {
+    await renderSummaryCards(summaryCardsEl, skillCosts, subagentCosts, apiRequests);
+  }
+
   // Attach event listeners for session change and tab switching
   document.getElementById('session-select')?.addEventListener('change', (e) => {
     const newSessionId = e.target.value;
@@ -94,4 +100,59 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
       }
     });
   });
+}
+
+/**
+ * Render six summary cards with cost attribution totals
+ * @param {HTMLElement} el - Container to render into
+ * @param {Array} skillCosts - Array of skill cost objects
+ * @param {Object} subagentCosts - Object of subagent cost data
+ * @param {Array} apiRequests - Array of API request objects
+ */
+async function renderSummaryCards(el, skillCosts, subagentCosts, apiRequests) {
+  // Calculate totals
+  const totalCost = skillCosts.reduce((sum, s) => sum + (s.totalCost || 0), 0) +
+                    Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalCost || 0), 0);
+
+  const totalTokens = skillCosts.reduce((sum, s) => sum + (s.totalTokens || 0), 0) +
+                      Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalTokens || 0), 0);
+
+  const contextTokens = skillCosts.reduce((sum, s) => sum + (s.contextTokens || 0), 0);
+  const contextOverheadPct = totalTokens > 0 ?
+    ((contextTokens / totalTokens) * 100).toFixed(1) :
+    0;
+
+  const skillCallCount = skillCosts.length;
+  const agentCallCount = Object.keys(subagentCosts).length;
+  const apiRequestCount = apiRequests.length;
+
+  // Render cards
+  const cardsHtml = `
+    <div class="summary-card">
+      <div class="card-label">Total Cost</div>
+      <div class="card-value">${fmt$(totalCost)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">Tokens</div>
+      <div class="card-value">${fmtTokens(totalTokens)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">Context Overhead</div>
+      <div class="card-value">${contextOverheadPct}%</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">Skill Calls</div>
+      <div class="card-value">${skillCallCount}</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">Agent Calls</div>
+      <div class="card-value">${agentCallCount}</div>
+    </div>
+    <div class="summary-card">
+      <div class="card-label">API Requests</div>
+      <div class="card-value">${apiRequestCount}</div>
+    </div>
+  `;
+
+  el.innerHTML = cardsHtml;
 }
