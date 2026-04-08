@@ -338,6 +338,172 @@ async function testTabSwitching() {
 }
 
 /**
+ * Test: renderAgentsTab creates table with correct structure
+ */
+async function testAgentsTabStructure() {
+  const { renderAgentsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockSubagentCosts = {
+    'general-purpose': {
+      name: 'general-purpose',
+      totalCost: 0.30,
+      totalTokens: 10000,
+      callCount: 8,
+      timeWindow: 'last 7d',
+      contextTokens: 1000,
+      models: ['claude-opus']
+    },
+    'code-reviewer': {
+      name: 'code-reviewer',
+      totalCost: 0.20,
+      totalTokens: 6000,
+      callCount: 4,
+      timeWindow: 'last 24h',
+      contextTokens: 600,
+      models: ['claude-sonnet']
+    }
+  };
+
+  await renderAgentsTab(container, mockSubagentCosts);
+
+  // Verify table structure
+  const table = container.querySelector('.agents-table');
+  assert(table, 'Table with class agents-table not found');
+
+  // Verify header
+  const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent);
+  const expectedHeaders = ['Agent', 'Cost', 'Tokens', 'Calls'];
+  assert(headers.length === 4, `Expected 4 headers, got ${headers.length}`);
+  expectedHeaders.forEach((expected, idx) => {
+    assert(headers[idx] === expected, `Expected header "${expected}", got "${headers[idx]}"`);
+  });
+
+  // Verify rows
+  const agentRows = container.querySelectorAll('tbody tr.agent-row');
+  assert(agentRows.length === 2, `Expected 2 agent rows, got ${agentRows.length}`);
+
+  console.log('✓ testAgentsTabStructure: table structure correct');
+}
+
+/**
+ * Test: renderAgentsTab expandable rows
+ */
+async function testAgentsTabExpandable() {
+  const { renderAgentsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockSubagentCosts = {
+    'test-agent': {
+      name: 'test-agent',
+      totalCost: 0.15,
+      totalTokens: 5000,
+      callCount: 3,
+      timeWindow: 'last 24h',
+      contextTokens: 500,
+      models: ['claude-opus']
+    }
+  };
+
+  await renderAgentsTab(container, mockSubagentCosts);
+
+  // Find the agent row
+  const agentRow = container.querySelector('tbody tr.agent-row');
+  assert(agentRow, 'Agent row not found');
+
+  // Find the detail row
+  const detailRow = agentRow.nextElementSibling;
+  assert(detailRow && detailRow.classList.contains('agent-detail'), 'Detail row not found');
+
+  // Detail row should start hidden
+  assert(detailRow.style.display === 'none', `Expected detail row to be hidden, got display="${detailRow.style.display}"`);
+
+  // Simulate click
+  agentRow.click();
+
+  // After click, detail row should be visible
+  assert(detailRow.style.display !== 'none', `Expected detail row to be visible after click, got display="${detailRow.style.display}"`);
+
+  console.log('✓ testAgentsTabExpandable: expandable rows work correctly');
+}
+
+/**
+ * Test: renderAgentsTab formats data correctly
+ */
+async function testAgentsTabFormatting() {
+  const { renderAgentsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockSubagentCosts = {
+    'general-purpose': {
+      name: 'general-purpose',
+      totalCost: 0.30,
+      totalTokens: 10000,
+      callCount: 8
+    }
+  };
+
+  await renderAgentsTab(container, mockSubagentCosts);
+
+  // Verify cell content
+  const cells = container.querySelectorAll('tbody tr.agent-row td');
+  assert(cells[0].textContent === 'general-purpose', `Expected "general-purpose", got "${cells[0].textContent}"`);
+  assert(cells[1].textContent.includes('$'), `Expected cost to include $, got "${cells[1].textContent}"`);
+  assert(cells[2].textContent.match(/\d+K?/), `Expected tokens formatted, got "${cells[2].textContent}"`);
+  assert(cells[3].textContent === '8', `Expected call count "8", got "${cells[3].textContent}"`);
+
+  console.log('✓ testAgentsTabFormatting: data formatted correctly');
+}
+
+/**
+ * Test: Verify agents detail panel content is rendered correctly
+ */
+async function testAgentsDetailContent() {
+  const { renderAgentsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockSubagentCosts = {
+    'general-purpose': {
+      name: 'general-purpose',
+      totalCost: 0.30,
+      totalTokens: 10000,
+      callCount: 8,
+      timeWindow: '2026-04-08T00:00:00Z',
+      contextTokens: 2000,
+      models: ['claude-opus-4-6', 'claude-sonnet-4-6'],
+      detailCost: 0.30
+    }
+  };
+
+  await renderAgentsTab(container, mockSubagentCosts);
+
+  // Find and expand the detail row
+  const agentRow = container.querySelector('tbody tr.agent-row');
+  agentRow.click();
+
+  // Check detail panel content
+  const detailRow = agentRow.nextElementSibling;
+  const detailPanel = detailRow.querySelector('.detail-panel');
+  assert(detailPanel, 'Detail panel not found');
+
+  const detailText = detailPanel.textContent;
+  assert(detailText.includes('Time Window'), 'Time Window label missing');
+  assert(detailText.includes('2026-04-08T00:00:00Z'), 'Time Window value missing from detail');
+  assert(detailText.includes('Context Tokens'), 'Context Tokens label missing');
+  assert(detailText.includes('2K'), 'Context Tokens value missing from detail (2000 tokens formatted as 2K)');
+  assert(detailText.includes('Models'), 'Models label missing');
+  assert(detailText.includes('claude-opus-4-6'), 'Model 1 missing from detail');
+  assert(detailText.includes('claude-sonnet-4-6'), 'Model 2 missing from detail');
+  assert(detailText.includes('Cost'), 'Cost label missing');
+
+  console.log('✓ testAgentsDetailContent: detail content rendered correctly');
+}
+
+/**
  * Helper: simple assertion
  */
 function assert(condition, message) {
@@ -365,6 +531,12 @@ async function runTests() {
     await testSkillsTabFormatting();
     await testSkillsDetailContent();
     await testTabSwitching();
+
+    console.log('\n--- Agents Tab Tests ---');
+    await testAgentsTabStructure();
+    await testAgentsTabExpandable();
+    await testAgentsTabFormatting();
+    await testAgentsDetailContent();
 
     console.log('\n✅ All tests passed');
     process.exit(0);

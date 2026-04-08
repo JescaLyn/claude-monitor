@@ -126,8 +126,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
           if (tabName === 'skills') {
             renderSkillsTab(panel, skillCosts);
           } else if (tabName === 'agents') {
-            // Agent tab rendering will be implemented in next task
-            panel.innerHTML = '<p class="placeholder">Agent costs coming soon...</p>';
+            renderAgentsTab(panel, subagentCosts);
           } else if (tabName === 'requests') {
             // API requests tab rendering will be implemented in next task
             panel.innerHTML = '<p class="placeholder">API request details coming soon...</p>';
@@ -184,6 +183,58 @@ export async function renderSkillsTab(el, skillCosts) {
     row.addEventListener('click', (e) => {
       const detailRow = row.nextElementSibling;
       if (detailRow && detailRow.classList.contains('skill-detail')) {
+        detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+      }
+    });
+  });
+}
+
+/**
+ * Render the Agents sub-tab with a table of agents and expandable detail rows
+ * @param {HTMLElement} el - Container to render into
+ * @param {Object} subagentCosts - Object with agent names as keys and cost data as values
+ */
+export async function renderAgentsTab(el, subagentCosts) {
+  const html = `
+    <table class="agents-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Cost</th>
+          <th>Tokens</th>
+          <th>Calls</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${Object.entries(subagentCosts).map(([key, agent]) => `
+          <tr class="agent-row" data-agent="${agent.name || key}">
+            <td>${agent.name || key}</td>
+            <td>${fmt$(agent.totalCost)}</td>
+            <td>${fmtTokens(agent.totalTokens)}</td>
+            <td>${agent.callCount}</td>
+          </tr>
+          <tr class="agent-detail" style="display: none;">
+            <td colspan="4">
+              <div class="detail-panel">
+                <div><strong>Time Window:</strong> ${agent.timeWindow || 'N/A'}</div>
+                <div><strong>Context Tokens:</strong> ${fmtTokens(agent.contextTokens || 0)}</div>
+                <div><strong>Models:</strong> ${agent.models?.join(', ') || 'N/A'}</div>
+                <div><strong>Cost:</strong> ${fmt$(agent.detailCost || agent.totalCost)}</div>
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  el.innerHTML = html;
+
+  // Add click handlers for expand/collapse
+  el.querySelectorAll('.agent-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      const detailRow = row.nextElementSibling;
+      if (detailRow && detailRow.classList.contains('agent-detail')) {
         detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
       }
     });
