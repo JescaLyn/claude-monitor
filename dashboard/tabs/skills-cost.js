@@ -1,7 +1,7 @@
 import { get, fmt$ } from '/utils.js';
 
 export async function render(el) {
-  const rows = await get('/api/skills/costs');
+  const rows = await get('/skills/costs');
 
   if (rows.length === 0) {
     el.innerHTML = '<p class="empty">No skill invocations recorded yet.</p>';
@@ -38,7 +38,7 @@ export async function render(el) {
     </table>
   `;
 
-  attachSorting(el, '/api/skills/costs');
+  attachSorting(el, '/skills/costs');
 }
 
 function attachSorting(el, endpoint) {

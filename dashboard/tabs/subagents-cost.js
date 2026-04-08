@@ -1,7 +1,7 @@
 import { get, fmt$ } from '/utils.js';
 
 export async function render(el) {
-  const data = await get('/api/subagents/costs');
+  const data = await get('/subagents/costs');
 
   if (data.invocation_count === 0) {
     el.innerHTML = '<p class="empty">No subagent invocations recorded yet.</p>';

@@ -14,7 +14,7 @@ async function renderRequests(el, offset = 0, filters = {}) {
     offset,
     ...filters,
   });
-  const rows = await get(`/api/requests?${params}`);
+  const rows = await get(`/requests?${params}`);
 
   if (rows.length === 0 && offset === 0) {
     el.innerHTML = '<p class="empty">No API requests recorded yet.</p>';

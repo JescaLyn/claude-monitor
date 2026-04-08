@@ -175,7 +175,7 @@ function attachDetailModal() {
 }
 
 async function showSessionDetail(sessionId) {
-  const breakdown = await get(`/api/sessions/${encodeURIComponent(sessionId)}/breakdown`);
+  const breakdown = await get(`/sessions/${encodeURIComponent(sessionId)}/breakdown`);
   const modal = document.getElementById('session-detail-modal');
 
   const content = document.createElement('div');
