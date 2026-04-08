@@ -1,20 +1,17 @@
 /**
  * Tests for cost-analysis.js summary cards rendering
+ * Uses the real renderSummaryCards function from the implementation
  */
 
-// Mock DOM and fetch for testing
-class MockElement {
-  constructor() {
-    this.innerHTML = '';
-    this.children = [];
-  }
-}
+import { renderSummaryCards } from '../../dashboard/tabs/cost-analysis.js';
+import { JSDOM } from 'jsdom';
 
-global.document = {
-  getElementById: (id) => new MockElement(),
-  querySelectorAll: () => []
-};
+// Setup: Mock DOM document for Node.js
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
+global.document = dom.window.document;
+global.window = dom.window;
 
+// Mock fetch to avoid network calls
 global.fetch = async () => ({
   ok: true,
   json: async () => ({})
@@ -24,7 +21,7 @@ global.fetch = async () => ({
  * Test: renderSummaryCards creates 6 cards
  */
 async function testSummaryCardsCount() {
-  const el = new MockElement();
+  const container = document.createElement('div');
 
   const skillCosts = [
     { name: 'skill-1', totalCost: 0.5, totalTokens: 1000, contextTokens: 200 },
@@ -40,114 +37,44 @@ async function testSummaryCardsCount() {
     { id: 'req-2', cost: 0.02 }
   ];
 
-  // Calculate totals (same logic as renderSummaryCards)
-  const totalCost = skillCosts.reduce((sum, s) => sum + (s.totalCost || 0), 0) +
-                    Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalCost || 0), 0);
-
-  const totalTokens = skillCosts.reduce((sum, s) => sum + (s.totalTokens || 0), 0) +
-                      Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalTokens || 0), 0);
-
-  const contextOverheadPct = totalTokens > 0 ?
-    ((skillCosts.reduce((sum, s) => sum + (s.contextTokens || 0), 0) / totalTokens) * 100).toFixed(1) :
-    0;
-
-  const skillCallCount = skillCosts.length;
-  const agentCallCount = Object.keys(subagentCosts).length;
-  const apiRequestCount = apiRequests.length;
-
-  // Generate HTML (same as renderSummaryCards)
-  const cardsHtml = `
-    <div class="summary-card">
-      <div class="card-label">Total Cost</div>
-      <div class="card-value">${fmt$(totalCost)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Tokens</div>
-      <div class="card-value">${fmtTokens(totalTokens)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Context Overhead</div>
-      <div class="card-value">${contextOverheadPct}%</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Skill Calls</div>
-      <div class="card-value">${skillCallCount}</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Agent Calls</div>
-      <div class="card-value">${agentCallCount}</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">API Requests</div>
-      <div class="card-value">${apiRequestCount}</div>
-    </div>
-  `;
-
-  el.innerHTML = cardsHtml;
+  // Call real implementation
+  await renderSummaryCards(container, skillCosts, subagentCosts, apiRequests);
 
   // Verify 6 cards exist
-  const cardCount = el.innerHTML.match(/class="summary-card"/g).length;
-  assert(cardCount === 6, `Expected 6 cards, got ${cardCount}`);
+  const cards = container.querySelectorAll('.summary-card');
+  assert(cards.length === 6, `Expected 6 cards, got ${cards.length}`);
   console.log('✓ testSummaryCardsCount: 6 cards created');
 }
 
 /**
- * Test: Each card has correct label
+ * Test: Each card has correct labels
  */
 async function testCardLabels() {
-  const el = new MockElement();
+  const container = document.createElement('div');
 
   const skillCosts = [{ totalCost: 1, totalTokens: 1000, contextTokens: 100 }];
   const subagentCosts = {};
   const apiRequests = [];
 
-  // Same rendering logic
-  const totalCost = 1;
-  const totalTokens = 1000;
-  const contextOverheadPct = '10.0';
+  // Call real implementation
+  await renderSummaryCards(container, skillCosts, subagentCosts, apiRequests);
 
-  const cardsHtml = `
-    <div class="summary-card">
-      <div class="card-label">Total Cost</div>
-      <div class="card-value">$${totalCost.toFixed(4)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Tokens</div>
-      <div class="card-value">1K</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Context Overhead</div>
-      <div class="card-value">${contextOverheadPct}%</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Skill Calls</div>
-      <div class="card-value">1</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">Agent Calls</div>
-      <div class="card-value">0</div>
-    </div>
-    <div class="summary-card">
-      <div class="card-label">API Requests</div>
-      <div class="card-value">0</div>
-    </div>
-  `;
-
-  el.innerHTML = cardsHtml;
-
+  // Verify all expected labels are present
+  const labels = Array.from(container.querySelectorAll('.card-label')).map(el => el.textContent);
   const expectedLabels = ['Total Cost', 'Tokens', 'Context Overhead', 'Skill Calls', 'Agent Calls', 'API Requests'];
-  expectedLabels.forEach(label => {
-    assert(el.innerHTML.includes(label), `Expected label "${label}" not found`);
+
+  expectedLabels.forEach(expected => {
+    assert(labels.includes(expected), `Expected label "${expected}" not found in: ${labels.join(', ')}`);
   });
 
   console.log('✓ testCardLabels: all labels present');
 }
 
 /**
- * Test: Values are formatted correctly
+ * Test: Card values are calculated and formatted correctly
  */
 async function testCardValueFormatting() {
-  const el = new MockElement();
+  const container = document.createElement('div');
 
   const skillCosts = [
     { totalCost: 1.2345, totalTokens: 5000, contextTokens: 500 },
@@ -158,35 +85,60 @@ async function testCardValueFormatting() {
   };
   const apiRequests = [{ id: 'r1' }, { id: 'r2' }];
 
-  // Calculate same as function
-  const totalCost = skillCosts.reduce((sum, s) => sum + (s.totalCost || 0), 0) +
-                    Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalCost || 0), 0);
-  const totalTokens = skillCosts.reduce((sum, s) => sum + (s.totalTokens || 0), 0) +
-                      Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalTokens || 0), 0);
+  // Call real implementation
+  await renderSummaryCards(container, skillCosts, subagentCosts, apiRequests);
 
-  const costFormatted = `$${totalCost.toFixed(4)}`;
-  const tokensFormatted = totalTokens >= 1000 ? `${Math.round(totalTokens / 1000)}K` : String(totalTokens);
-  const contextPct = ((skillCosts.reduce((sum, s) => sum + (s.contextTokens || 0), 0) / totalTokens) * 100).toFixed(1);
+  // Verify card values
+  const values = Array.from(container.querySelectorAll('.card-value')).map(el => el.textContent);
 
-  const cardsHtml = `
-    <div class="summary-card"><div class="card-value">${costFormatted}</div></div>
-    <div class="summary-card"><div class="card-value">${tokensFormatted}</div></div>
-    <div class="summary-card"><div class="card-value">${contextPct}%</div></div>
-    <div class="summary-card"><div class="card-value">2</div></div>
-    <div class="summary-card"><div class="card-value">1</div></div>
-    <div class="summary-card"><div class="card-value">2</div></div>
-  `;
+  // Should have 6 values
+  assert(values.length === 6, `Expected 6 values, got ${values.length}`);
 
-  el.innerHTML = cardsHtml;
+  // First value should be formatted currency (total cost = 1.2345 + 0.5 + 0.25 = 1.9845)
+  assert(values[0].includes('$'), `Expected currency format in "${values[0]}"`);
 
-  // Verify formatting (using calculated values)
-  assert(el.innerHTML.includes(costFormatted), `Expected currency format "${costFormatted}", got: ${el.innerHTML}`);
-  assert(el.innerHTML.includes(tokensFormatted), `Expected token format "${tokensFormatted}" in: ${el.innerHTML}`);
-  assert(el.innerHTML.includes('%'), `Expected percentage in: ${el.innerHTML}`);
-  assert(el.innerHTML.includes('>2<'), `Expected skill count "2" in: ${el.innerHTML}`);
-  assert(el.innerHTML.includes('>1<'), `Expected agent count "1" in: ${el.innerHTML}`);
+  // Second value should be formatted tokens (8500 tokens = 8K or 8.5K)
+  assert(values[1].match(/\d+K?/), `Expected token format in "${values[1]}"`);
+
+  // Third value should be percentage (context tokens = 500 + 400 + 300 = 1200 out of 8500 = 14.1%)
+  assert(values[2].includes('%'), `Expected percentage in "${values[2]}"`);
+
+  // Fourth value should be 2 (skill count)
+  assert(values[3] === '2', `Expected skill count 2, got "${values[3]}"`);
+
+  // Fifth value should be 1 (agent count)
+  assert(values[4] === '1', `Expected agent count 1, got "${values[4]}"`);
+
+  // Sixth value should be 2 (API request count)
+  assert(values[5] === '2', `Expected API request count 2, got "${values[5]}"`);
 
   console.log('✓ testCardValueFormatting: values formatted correctly');
+}
+
+/**
+ * Test: Handles empty data gracefully
+ */
+async function testEmptyDataHandling() {
+  const container = document.createElement('div');
+
+  const skillCosts = [];
+  const subagentCosts = {};
+  const apiRequests = [];
+
+  // Call real implementation
+  await renderSummaryCards(container, skillCosts, subagentCosts, apiRequests);
+
+  // Should still create 6 cards even with empty data
+  const cards = container.querySelectorAll('.summary-card');
+  assert(cards.length === 6, `Expected 6 cards with empty data, got ${cards.length}`);
+
+  // Verify zero values are displayed correctly
+  const values = Array.from(container.querySelectorAll('.card-value')).map(el => el.textContent);
+  assert(values[3] === '0', `Expected skill count 0, got "${values[3]}"`);
+  assert(values[4] === '0', `Expected agent count 0, got "${values[4]}"`);
+  assert(values[5] === '0', `Expected API request count 0, got "${values[5]}"`);
+
+  console.log('✓ testEmptyDataHandling: handles empty data correctly');
 }
 
 /**
@@ -199,23 +151,6 @@ function assert(condition, message) {
 }
 
 /**
- * Helper: format currency (simulating fmt$ from utils.js)
- */
-function fmt$(n) {
-  return `$${(n ?? 0).toFixed(4)}`;
-}
-
-/**
- * Helper: format tokens (simulating fmtTokens from utils.js)
- */
-function fmtTokens(n) {
-  n = n ?? 0;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
-  return String(n);
-}
-
-/**
  * Run all tests
  */
 async function runTests() {
@@ -225,11 +160,13 @@ async function runTests() {
     await testSummaryCardsCount();
     await testCardLabels();
     await testCardValueFormatting();
+    await testEmptyDataHandling();
 
     console.log('\n✅ All tests passed');
     process.exit(0);
   } catch (err) {
     console.error(`\n❌ Test failed: ${err.message}`);
+    console.error(err.stack);
     process.exit(1);
   }
 }

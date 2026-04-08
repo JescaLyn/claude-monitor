@@ -1,10 +1,14 @@
 {
   "name": "claude-monitor",
   "private": true,
+  "type": "module",
   "scripts": {
     "start": "npm start --prefix hub",
     "service:load": "launchctl load ~/Library/LaunchAgents/com.example.claude-monitor.plist",
     "service:unload": "launchctl unload ~/Library/LaunchAgents/com.example.claude-monitor.plist",
     "service:restart": "npm run service:unload && npm run service:load"
+  },
+  "dependencies": {
+    "jsdom": "^29.0.2"
   }
 }

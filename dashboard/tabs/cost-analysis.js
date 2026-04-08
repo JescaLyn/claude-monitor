@@ -1,4 +1,4 @@
-import { get, fmt$, fmtTokens } from '/utils.js';
+import { get, fmt$, fmtTokens } from '../utils.js';
 
 export async function render(el) {
   // Fetch all available sessions and current selection
@@ -109,7 +109,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
  * @param {Object} subagentCosts - Object of subagent cost data
  * @param {Array} apiRequests - Array of API request objects
  */
-async function renderSummaryCards(el, skillCosts, subagentCosts, apiRequests) {
+export async function renderSummaryCards(el, skillCosts, subagentCosts, apiRequests) {
   // Calculate totals
   const totalCost = skillCosts.reduce((sum, s) => sum + (s.totalCost || 0), 0) +
                     Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalCost || 0), 0);
