@@ -1,4 +1,4 @@
-import { get, fmt$, fmtDate } from '/utils.js';
+import { get, fmt$, fmtDate, escapeHtml } from '../utils.js';
 
 const LIMIT = 50;
 
@@ -23,7 +23,7 @@ async function renderRequests(el, offset = 0, filters = {}) {
 
   el.innerHTML = `
     <div class="filters">
-      <input type="text" id="model-filter" placeholder="Filter by model" value="${filters.model || ''}">
+      <input type="text" id="model-filter" placeholder="Filter by model" value="${escapeHtml(filters.model || '')}">
       <input type="number" id="min-cost" placeholder="Min cost" value="${filters.minCost || 0}" step="0.01">
       <input type="number" id="max-cost" placeholder="Max cost" value="${filters.maxCost || ''}" step="0.01">
       <button id="apply-filters">Apply Filters</button>
@@ -47,8 +47,8 @@ async function renderRequests(el, offset = 0, filters = {}) {
         ${rows.map(r => `
           <tr>
             <td>${fmtDate(r.ts)}</td>
-            <td class="mono muted">${r.session_id.slice(0, 8)}…</td>
-            <td>${r.model}</td>
+            <td class="mono muted">${escapeHtml(r.session_id.slice(0, 8))}…</td>
+            <td>${escapeHtml(r.model)}</td>
             <td>${r.input_tokens}</td>
             <td>${r.cache_read_tokens}</td>
             <td>${r.cache_creation_tokens}</td>

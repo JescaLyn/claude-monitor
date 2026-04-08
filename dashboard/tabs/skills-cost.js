@@ -1,4 +1,4 @@
-import { get, fmt$ } from '/utils.js';
+import { get, fmt$, escapeHtml } from '../utils.js';
 
 export async function render(el) {
   const rows = await get('/skills/costs');
@@ -25,7 +25,7 @@ export async function render(el) {
           const avgCost = r.invocation_count > 0 ? r.total_cost_usd / r.invocation_count : 0;
           return `
             <tr>
-              <td>${r.skill_name}</td>
+              <td>${escapeHtml(r.skill_name)}</td>
               <td>${r.invocation_count}</td>
               <td>${r.api_request_count}</td>
               <td>${fmt$(r.total_cost_usd)}</td>
@@ -68,7 +68,7 @@ function attachSorting(el, endpoint) {
               const avgCost = r.invocation_count > 0 ? r.total_cost_usd / r.invocation_count : 0;
               return `
                 <tr>
-                  <td>${r.skill_name}</td>
+                  <td>${escapeHtml(r.skill_name)}</td>
                   <td>${r.invocation_count}</td>
                   <td>${r.api_request_count}</td>
                   <td>${fmt$(r.total_cost_usd)}</td>

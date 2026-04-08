@@ -1,16 +1,4 @@
-import { get, fmt$, fmtTokens, fmtDate } from '../utils.js';
-
-/**
- * Escape HTML special characters to prevent XSS
- * @param {string} text - Text to escape
- * @returns {string} Escaped HTML
- */
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+import { get, fmt$, fmtTokens, fmtDate, escapeHtml } from '../utils.js';
 
 export async function render(el) {
   // Fetch all available sessions and current selection
@@ -34,7 +22,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
         <div class="control-group">
           <label for="session-select">Session</label>
           <select id="session-select">
-            ${allSessions.map(s => `<option value="${s.id}" ${s.id === sessionId ? 'selected' : ''}>${s.name || s.id.slice(0, 8)}</option>`).join('')}
+            ${allSessions.map(s => `<option value="${escapeHtml(s.id)}" ${s.id === sessionId ? 'selected' : ''}>${escapeHtml(s.name || s.id.slice(0, 8))}</option>`).join('')}
           </select>
         </div>
         <div class="control-group">
@@ -176,7 +164,8 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
  * @param {Array} skillCosts - Array of skill cost objects
  */
 export async function renderSkillsTab(el, skillCosts) {
-  const maxCost = Math.max(...skillCosts.map(s => s.totalCost || 0));
+  const costs = skillCosts.map(s => s.totalCost || 0);
+  const maxCost = costs.length > 0 ? Math.max(...costs) : 0;
   const html = `
     <table class="skills-table">
       <thead>
@@ -190,10 +179,10 @@ export async function renderSkillsTab(el, skillCosts) {
       <tbody>
         ${skillCosts.map(skill => {
           const costPercentage = maxCost > 0 ? ((skill.totalCost || 0) / maxCost) * 100 : 0;
-          const modelBadges = skill.models?.map(m => `<span class="model-badge ${getModelBadgeClass(m)}">${m}</span>`).join(' ') || 'N/A';
+          const modelBadges = skill.models?.map(m => `<span class="model-badge ${getModelBadgeClass(m)}">${escapeHtml(m)}</span>`).join(' ') || 'N/A';
           return `
-          <tr class="skill-row" data-skill="${skill.skillName}">
-            <td>${skill.skillName}</td>
+          <tr class="skill-row" data-skill="${escapeHtml(skill.skillName)}">
+            <td>${escapeHtml(skill.skillName)}</td>
             <td class="cost-cell">
               <div class="cost-bar" style="width: ${costPercentage}%"></div>
               <span class="cost-value">${fmt$(skill.totalCost)}</span>
@@ -307,11 +296,12 @@ export async function renderAPIRequestsTab(el, apiRequests) {
     }
 
     // Render only tbody
-    const maxCost = Math.max(...sorted.map(req => req.cost || 0));
+    const costs = sorted.map(req => req.cost || 0);
+    const maxCost = costs.length > 0 ? Math.max(...costs) : 0;
     tbody.innerHTML = sorted.map(req => {
       const costPercentage = maxCost > 0 ? (req.cost / maxCost) * 100 : 0;
       const modelName = req.model || 'Unknown';
-      const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${modelName}</span>`;
+      const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${escapeHtml(modelName)}</span>`;
       return `
         <tr class="request-row" data-timestamp="${req.timestamp}">
           <td>${fmtDate(req.timestamp)}</td>
@@ -393,7 +383,8 @@ export async function renderAPIRequestsTab(el, apiRequests) {
  */
 export async function renderAgentsTab(el, subagentCosts) {
   const agentsArray = Object.entries(subagentCosts);
-  const maxCost = Math.max(...agentsArray.map(([, agent]) => agent.totalCost || 0));
+  const costs = agentsArray.map(([, agent]) => agent.totalCost || 0);
+  const maxCost = costs.length > 0 ? Math.max(...costs) : 0;
 
   const html = `
     <table class="agents-table">
@@ -408,10 +399,10 @@ export async function renderAgentsTab(el, subagentCosts) {
       <tbody>
         ${agentsArray.map(([key, agent]) => {
           const costPercentage = maxCost > 0 ? ((agent.totalCost || 0) / maxCost) * 100 : 0;
-          const modelBadges = agent.models?.map(m => `<span class="model-badge ${getModelBadgeClass(m)}">${m}</span>`).join(' ') || 'N/A';
+          const modelBadges = agent.models?.map(m => `<span class="model-badge ${getModelBadgeClass(m)}">${escapeHtml(m)}</span>`).join(' ') || 'N/A';
           return `
-          <tr class="agent-row" data-agent="${agent.name || key}">
-            <td>${agent.name || key}</td>
+          <tr class="agent-row" data-agent="${escapeHtml(agent.name || key)}">
+            <td>${escapeHtml(agent.name || key)}</td>
             <td class="cost-cell">
               <div class="cost-bar" style="width: ${costPercentage}%"></div>
               <span class="cost-value">${fmt$(agent.totalCost)}</span>
