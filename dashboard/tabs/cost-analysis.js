@@ -84,6 +84,28 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
     await renderSummaryCards(summaryCardsEl, skillCosts, subagentCosts, apiRequests);
   }
 
+  // Render context bar if context overhead is significant
+  const contextBarEl = document.getElementById('context-bar');
+  if (contextBarEl) {
+    const totalTokens = skillCosts.reduce((sum, s) => sum + (s.totalTokens || 0), 0) +
+                        Object.values(subagentCosts).reduce((sum, a) => sum + (a.totalTokens || 0), 0);
+    const contextTokens = skillCosts.reduce((sum, s) => sum + (s.contextTokens || 0), 0);
+    const contextOverheadPct = totalTokens > 0 ?
+      ((contextTokens / totalTokens) * 100).toFixed(1) :
+      0;
+
+    if (contextOverheadPct > 10) {
+      contextBarEl.innerHTML = `
+        <div class="context-bar-icon">⚠️</div>
+        <div class="context-bar-message">
+          Context overhead is <strong>${contextOverheadPct}%</strong> of total tokens. Consider optimizing context to reduce costs.
+        </div>
+      `;
+    } else {
+      contextBarEl.style.display = 'none';
+    }
+  }
+
   // Initialize tab panels and render Skills tab by default
   const tabPanelsEl = document.getElementById('tab-panels');
   if (tabPanelsEl) {
@@ -109,7 +131,8 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
 
   document.querySelectorAll('.section-tab').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      const tabName = e.target.dataset.tab;
+      const tabBtn = e.target.closest('.section-tab');
+      const tabName = tabBtn?.dataset.tab;
       if (tabName) {
         // Hide all panels and deactivate all tabs
         document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
@@ -120,7 +143,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
         const panel = document.getElementById(panelId);
         if (panel) {
           panel.classList.add('active');
-          e.target.classList.add('active');
+          tabBtn.classList.add('active');
 
           // Render content based on selected tab
           if (tabName === 'skills') {
@@ -153,10 +176,17 @@ export async function renderSkillsTab(el, skillCosts) {
         </tr>
       </thead>
       <tbody>
-        ${skillCosts.map(skill => `
+        ${skillCosts.map(skill => {
+          const maxCost = Math.max(...skillCosts.map(s => s.totalCost || 0));
+          const costPercentage = maxCost > 0 ? ((skill.totalCost || 0) / maxCost) * 100 : 0;
+          const modelBadges = skill.models?.map(m => `<span class="model-badge ${getModelBadgeClass(m)}">${m}</span>`).join(' ') || 'N/A';
+          return `
           <tr class="skill-row" data-skill="${skill.skillName}">
             <td>${skill.skillName}</td>
-            <td>${fmt$(skill.totalCost)}</td>
+            <td class="cost-cell">
+              <div class="cost-bar" style="width: ${costPercentage}%"></div>
+              <span class="cost-value">${fmt$(skill.totalCost)}</span>
+            </td>
             <td>${fmtTokens(skill.totalTokens)}</td>
             <td>${skill.callCount}</td>
           </tr>
@@ -165,12 +195,13 @@ export async function renderSkillsTab(el, skillCosts) {
               <div class="detail-panel">
                 <div><strong>Time Window:</strong> ${skill.timeWindow || 'N/A'}</div>
                 <div><strong>Context Tokens:</strong> ${fmtTokens(skill.contextTokens || 0)}</div>
-                <div><strong>Models:</strong> ${skill.models?.join(', ') || 'N/A'}</div>
+                <div><strong>Models:</strong> ${modelBadges}</div>
                 <div><strong>Cost:</strong> ${fmt$(skill.detailCost || skill.totalCost)}</div>
               </div>
             </td>
           </tr>
-        `).join('')}
+        `;
+        }).join('')}
       </tbody>
     </table>
   `;
@@ -205,9 +236,21 @@ function fmtDurationMs(ms) {
  */
 export async function renderAPIRequestsTab(el, apiRequests) {
   let currentSort = { column: 'timestamp', ascending: false };
+  let filteredData = [...apiRequests];
 
   function renderTable(data) {
+    const maxCost = Math.max(...data.map(req => req.cost || 0));
     const html = `
+      <div class="cost-range-filter">
+        <div class="filter-input-group">
+          <label>Min Cost</label>
+          <input type="number" id="min-cost" placeholder="0.0000" step="0.0001" min="0">
+        </div>
+        <div class="filter-input-group">
+          <label>Max Cost</label>
+          <input type="number" id="max-cost" placeholder="∞" step="0.0001" min="0">
+        </div>
+      </div>
       <table class="requests-table">
         <thead>
           <tr>
@@ -218,12 +261,19 @@ export async function renderAPIRequestsTab(el, apiRequests) {
           </tr>
         </thead>
         <tbody>
-          ${data.map(req => `
+          ${data.map(req => {
+            const costPercentage = maxCost > 0 ? (req.cost / maxCost) * 100 : 0;
+            const modelName = req.model || 'Unknown';
+            const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${modelName}</span>`;
+            return `
             <tr class="request-row" data-timestamp="${req.timestamp}">
               <td>${fmtDate(req.timestamp)}</td>
-              <td>${fmt$(req.cost)}</td>
+              <td class="cost-cell">
+                <div class="cost-bar" style="width: ${costPercentage}%"></div>
+                <span class="cost-value">${fmt$(req.cost)}</span>
+              </td>
               <td>${fmtTokens(req.tokens)}</td>
-              <td>${req.model}</td>
+              <td>${modelBadge}</td>
             </tr>
             <tr class="request-detail" style="display: none;">
               <td colspan="4">
@@ -235,7 +285,8 @@ export async function renderAPIRequestsTab(el, apiRequests) {
                 </div>
               </td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
     `;
@@ -252,6 +303,27 @@ export async function renderAPIRequestsTab(el, apiRequests) {
       });
     });
 
+    // Cost range filtering
+    const minCostInput = el.querySelector('#min-cost');
+    const maxCostInput = el.querySelector('#max-cost');
+
+    if (minCostInput && maxCostInput) {
+      const applyFilter = () => {
+        const minCost = parseFloat(minCostInput.value) || 0;
+        const maxCost = parseFloat(maxCostInput.value) || Infinity;
+
+        filteredData = apiRequests.filter(req => {
+          const cost = req.cost || 0;
+          return cost >= minCost && cost <= maxCost;
+        });
+
+        renderTable(filteredData);
+      };
+
+      minCostInput.addEventListener('change', applyFilter);
+      maxCostInput.addEventListener('change', applyFilter);
+    }
+
     // Sorting
     el.querySelectorAll('th.sortable').forEach(header => {
       header.addEventListener('click', () => {
@@ -263,7 +335,7 @@ export async function renderAPIRequestsTab(el, apiRequests) {
           currentSort.ascending = true;
         }
 
-        const sorted = [...data].sort((a, b) => {
+        const sorted = [...filteredData].sort((a, b) => {
           const aVal = a[column];
           const bVal = b[column];
           const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
@@ -275,7 +347,7 @@ export async function renderAPIRequestsTab(el, apiRequests) {
     });
   }
 
-  renderTable(apiRequests);
+  renderTable(filteredData);
 }
 
 /**
@@ -284,6 +356,9 @@ export async function renderAPIRequestsTab(el, apiRequests) {
  * @param {Object} subagentCosts - Object with agent names as keys and cost data as values
  */
 export async function renderAgentsTab(el, subagentCosts) {
+  const agentsArray = Object.entries(subagentCosts);
+  const maxCost = Math.max(...agentsArray.map(([, agent]) => agent.totalCost || 0));
+
   const html = `
     <table class="agents-table">
       <thead>
@@ -295,10 +370,16 @@ export async function renderAgentsTab(el, subagentCosts) {
         </tr>
       </thead>
       <tbody>
-        ${Object.entries(subagentCosts).map(([key, agent]) => `
+        ${agentsArray.map(([key, agent]) => {
+          const costPercentage = maxCost > 0 ? ((agent.totalCost || 0) / maxCost) * 100 : 0;
+          const modelBadges = agent.models?.map(m => `<span class="model-badge ${getModelBadgeClass(m)}">${m}</span>`).join(' ') || 'N/A';
+          return `
           <tr class="agent-row" data-agent="${agent.name || key}">
             <td>${agent.name || key}</td>
-            <td>${fmt$(agent.totalCost)}</td>
+            <td class="cost-cell">
+              <div class="cost-bar" style="width: ${costPercentage}%"></div>
+              <span class="cost-value">${fmt$(agent.totalCost)}</span>
+            </td>
             <td>${fmtTokens(agent.totalTokens)}</td>
             <td>${agent.callCount}</td>
           </tr>
@@ -307,12 +388,13 @@ export async function renderAgentsTab(el, subagentCosts) {
               <div class="detail-panel">
                 <div><strong>Time Window:</strong> ${agent.timeWindow || 'N/A'}</div>
                 <div><strong>Context Tokens:</strong> ${fmtTokens(agent.contextTokens || 0)}</div>
-                <div><strong>Models:</strong> ${agent.models?.join(', ') || 'N/A'}</div>
+                <div><strong>Models:</strong> ${modelBadges}</div>
                 <div><strong>Cost:</strong> ${fmt$(agent.detailCost || agent.totalCost)}</div>
               </div>
             </td>
           </tr>
-        `).join('')}
+        `;
+        }).join('')}
       </tbody>
     </table>
   `;
@@ -354,33 +436,53 @@ export async function renderSummaryCards(el, skillCosts, subagentCosts, apiReque
   const agentCallCount = Object.keys(subagentCosts).length;
   const apiRequestCount = apiRequests.length;
 
-  // Render cards
+  // Render cards with context overhead card highlighted
   const cardsHtml = `
     <div class="summary-card">
       <div class="card-label">Total Cost</div>
       <div class="card-value">${fmt$(totalCost)}</div>
+      <div class="card-subtext">Total spend this session</div>
     </div>
     <div class="summary-card">
       <div class="card-label">Tokens</div>
       <div class="card-value">${fmtTokens(totalTokens)}</div>
+      <div class="card-subtext">Input + output tokens</div>
     </div>
-    <div class="summary-card">
+    <div class="summary-card context-overhead">
       <div class="card-label">Context Overhead</div>
       <div class="card-value">${contextOverheadPct}%</div>
+      <div class="card-subtext">Tokens spent on context</div>
     </div>
     <div class="summary-card">
       <div class="card-label">Skill Calls</div>
       <div class="card-value">${skillCallCount}</div>
+      <div class="card-subtext">Total skill invocations</div>
     </div>
     <div class="summary-card">
       <div class="card-label">Agent Calls</div>
       <div class="card-value">${agentCallCount}</div>
+      <div class="card-subtext">Total agent invocations</div>
     </div>
     <div class="summary-card">
       <div class="card-label">API Requests</div>
       <div class="card-value">${apiRequestCount}</div>
+      <div class="card-subtext">Claude API calls made</div>
     </div>
   `;
 
   el.innerHTML = cardsHtml;
+}
+
+/**
+ * Get model badge styling based on model name
+ * @param {string} model - Model name (e.g., 'claude-3-5-sonnet-20241022')
+ * @returns {string} Badge class name
+ */
+function getModelBadgeClass(model) {
+  if (!model) return '';
+  const lower = model.toLowerCase();
+  if (lower.includes('sonnet')) return 'sonnet';
+  if (lower.includes('haiku')) return 'haiku';
+  if (lower.includes('opus')) return 'opus';
+  return '';
 }
