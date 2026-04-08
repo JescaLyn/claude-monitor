@@ -1,4 +1,10 @@
 import type Database from 'better-sqlite3';
+import type {
+  SkillCostBreakdown,
+  SubagentCostBreakdown,
+  ApiRequestDetail,
+  SessionToolBreakdown,
+} from '../types.js';
 
 export interface OverviewStats {
   total_cost_usd: number;
@@ -159,6 +165,230 @@ export function getSkillStats(db: Database.Database): SkillStat[] {
     GROUP BY skill_name
     ORDER BY call_count DESC
   `).all() as SkillStat[];
+}
+
+function estimateContextTokens(inputTokens: number, promptLength?: number): number {
+  if (!promptLength || promptLength <= 0) {
+    // No prompt data; conservative estimate: all input is context
+    return inputTokens;
+  }
+  // Estimate prompt tokens: ~1 token per 4 characters
+  const estimatedPromptTokens = Math.ceil(promptLength / 4);
+  return Math.max(0, inputTokens - estimatedPromptTokens);
+}
+
+export function getSkillCostsWithRequests(db: Database.Database): SkillCostBreakdown[] {
+  return db.prepare(`
+    SELECT
+      te.skill_name,
+      COUNT(DISTINCT te.id) AS invocation_count,
+      COUNT(DISTINCT ar.id) AS api_request_count,
+      COALESCE(SUM(ar.cost_usd), 0) AS total_cost_usd,
+      COALESCE(
+        SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)),
+        0
+      ) AS total_context_tokens,
+      CASE
+        WHEN SUM(ar.input_tokens) > 0
+        THEN ROUND(
+          SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)) /
+          CAST(SUM(ar.input_tokens) AS REAL), 4
+        )
+        ELSE 0
+      END AS avg_context_token_ratio
+    FROM tool_events te
+    LEFT JOIN api_requests ar ON (
+      ar.session_id = te.session_id
+      AND ar.ts >= te.ts
+      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+    )
+    LEFT JOIN user_prompts up ON ar.prompt_id = up.prompt_id
+    WHERE te.tool_name = 'Skill' AND te.skill_name IS NOT NULL
+    GROUP BY te.skill_name
+    ORDER BY total_cost_usd DESC
+  `).all() as SkillCostBreakdown[];
+}
+
+export function getSubagentCostsWithRequests(db: Database.Database): SubagentCostBreakdown {
+  const result = db.prepare(`
+    SELECT
+      COUNT(DISTINCT te.id) AS invocation_count,
+      COUNT(DISTINCT ar.id) AS api_request_count,
+      COALESCE(SUM(ar.cost_usd), 0) AS total_cost_usd
+    FROM tool_events te
+    LEFT JOIN api_requests ar ON (
+      ar.session_id = te.session_id
+      AND ar.ts >= te.ts
+      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+    )
+    WHERE te.tool_name = 'Agent'
+  `).get() as SubagentCostBreakdown | undefined;
+
+  return result || { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 };
+}
+
+export interface ApiRequestFilters {
+  model?: string;
+  sessionId?: string;
+  minCost?: number;
+  maxCost?: number;
+  minDate?: number;
+  maxDate?: number;
+  isFastMode?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export function getApiRequests(
+  db: Database.Database,
+  filters: ApiRequestFilters = {}
+): ApiRequestDetail[] {
+  const {
+    model,
+    sessionId,
+    minCost = 0,
+    maxCost = Infinity,
+    minDate = 0,
+    maxDate = Infinity,
+    isFastMode,
+    limit = 100,
+    offset = 0,
+  } = filters;
+
+  let query = `
+    SELECT
+      ar.id,
+      ar.ts,
+      ar.session_id,
+      ar.model,
+      ar.input_tokens,
+      ar.cache_read_tokens,
+      ar.cache_creation_tokens,
+      ar.output_tokens,
+      ar.cost_usd,
+      ar.duration_ms,
+      ar.is_fast_mode
+    FROM api_requests ar
+    WHERE ar.cost_usd >= ? AND ar.cost_usd <= ?
+      AND ar.ts >= ? AND ar.ts <= ?
+  `;
+
+  const params: (string | number)[] = [minCost, maxCost, minDate * 1000000, maxDate * 1000000];
+
+  if (model) {
+    query += ` AND ar.model = ?`;
+    params.push(model);
+  }
+  if (sessionId) {
+    query += ` AND ar.session_id = ?`;
+    params.push(sessionId);
+  }
+  if (isFastMode !== undefined) {
+    query += ` AND ar.is_fast_mode = ?`;
+    params.push(isFastMode);
+  }
+
+  query += ` ORDER BY ar.ts DESC LIMIT ? OFFSET ?`;
+  params.push(limit, offset);
+
+  return db.prepare(query).all(...params) as ApiRequestDetail[];
+}
+
+export function getSessionBreakdown(
+  db: Database.Database,
+  sessionId: string
+): SessionToolBreakdown {
+  // Get all skills in this session with their costs
+  const skillCosts = db.prepare(`
+    SELECT
+      te.skill_name,
+      COUNT(DISTINCT te.id) AS invocation_count,
+      COUNT(DISTINCT ar.id) AS api_request_count,
+      COALESCE(SUM(ar.cost_usd), 0) AS total_cost_usd,
+      COALESCE(
+        SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)),
+        0
+      ) AS total_context_tokens,
+      CASE
+        WHEN SUM(ar.input_tokens) > 0
+        THEN ROUND(
+          SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)) /
+          CAST(SUM(ar.input_tokens) AS REAL), 4
+        )
+        ELSE 0
+      END AS avg_context_token_ratio
+    FROM tool_events te
+    LEFT JOIN api_requests ar ON (
+      ar.session_id = te.session_id
+      AND ar.ts >= te.ts
+      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+    )
+    LEFT JOIN user_prompts up ON ar.prompt_id = up.prompt_id
+    WHERE te.session_id = ? AND te.tool_name = 'Skill' AND te.skill_name IS NOT NULL
+    GROUP BY te.skill_name
+    ORDER BY total_cost_usd DESC
+  `).all(sessionId) as SkillCostBreakdown[];
+
+  // Get Agent costs in this session
+  const agentResult = db.prepare(`
+    SELECT
+      COUNT(DISTINCT te.id) AS invocation_count,
+      COUNT(DISTINCT ar.id) AS api_request_count,
+      COALESCE(SUM(ar.cost_usd), 0) AS total_cost_usd
+    FROM tool_events te
+    LEFT JOIN api_requests ar ON (
+      ar.session_id = te.session_id
+      AND ar.ts >= te.ts
+      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+    )
+    WHERE te.session_id = ? AND te.tool_name = 'Agent'
+  `).get(sessionId) as SubagentCostBreakdown | undefined;
+
+  const subagentCosts = agentResult || { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 };
+
+  // Get all API requests in this session
+  const apiRequests = db.prepare(`
+    SELECT
+      ar.id,
+      ar.ts,
+      ar.session_id,
+      ar.model,
+      ar.input_tokens,
+      ar.cache_read_tokens,
+      ar.cache_creation_tokens,
+      ar.output_tokens,
+      ar.cost_usd,
+      ar.duration_ms,
+      ar.is_fast_mode
+    FROM api_requests ar
+    WHERE ar.session_id = ?
+    ORDER BY ar.ts DESC
+  `).all(sessionId) as ApiRequestDetail[];
+
+  // Calculate total context tokens and ratio for session
+  const contextResult = db.prepare(`
+    SELECT
+      COALESCE(
+        SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)),
+        0
+      ) AS total_context_tokens,
+      SUM(ar.input_tokens) AS total_input_tokens
+    FROM api_requests ar
+    LEFT JOIN user_prompts up ON ar.prompt_id = up.prompt_id
+    WHERE ar.session_id = ?
+  `).get(sessionId) as { total_context_tokens: number; total_input_tokens: number } | undefined;
+
+  const totalContextTokens = contextResult?.total_context_tokens || 0;
+  const totalInputTokens = contextResult?.total_input_tokens || 1;
+  const contextTokenRatio = Math.round((totalContextTokens / totalInputTokens) * 10000) / 10000;
+
+  return {
+    skill_costs: skillCosts,
+    subagent_costs: subagentCosts,
+    api_requests: apiRequests,
+    total_context_tokens: totalContextTokens,
+    context_token_ratio: contextTokenRatio,
+  };
 }
 
 export function getCostByDay(db: Database.Database, days = 30): CostByDay[] {
