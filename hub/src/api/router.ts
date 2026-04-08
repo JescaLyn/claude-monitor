@@ -5,6 +5,20 @@ import {
   getOverview, getSessions, getSession, getToolStats, getSkillStats,
   getCostByDay, getCostByModel, getCostByMachine, setSessionName,
 } from './queries.js';
+import { resolveSessionName } from '../session-names.js';
+import type { SessionRow } from './queries.js';
+
+// Enrich a session with dynamically-resolved name
+function enrichSessionWithName(session: SessionRow): SessionRow {
+  if (!session.name) {
+    // Only resolve if not already set (allows user overrides via PUT to persist)
+    const resolvedName = resolveSessionName(session.id);
+    if (resolvedName) {
+      return { ...session, name: resolvedName };
+    }
+  }
+  return session;
+}
 
 const VALID_SORT_FIELDS = new Set(['started_at', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count']);
 const VALID_ORDERS = new Set(['asc', 'desc']);
@@ -26,13 +40,14 @@ export function createApiRouter(db: Database.Database): Router {
     const order = String(req.query.order ?? 'desc');
     if (!VALID_SORT_FIELDS.has(sort))  { res.status(400).json({ error: 'Invalid sort field' }); return; }
     if (!VALID_ORDERS.has(order))      { res.status(400).json({ error: 'Invalid order' }); return; }
-    res.json(getSessions(db, limit, offset, sort, order));
+    const sessions = getSessions(db, limit, offset, sort, order);
+    res.json(sessions.map(enrichSessionWithName));
   });
 
   router.get('/sessions/:id', (req, res) => {
     const session = getSession(db, req.params.id);
     if (!session) { res.status(404).json({ error: 'not found' }); return; }
-    res.json(session);
+    res.json(enrichSessionWithName(session));
   });
 
   router.put('/sessions/:id', (req, res) => {
