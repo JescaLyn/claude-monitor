@@ -48,7 +48,6 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
         <button class="section-tab" data-tab="requests">API Requests <span class="tab-count">0</span></button>
       </div>
 
-      <!-- Tab content will be populated in future tasks (Task 3+) -->
       <div class="tab-panels" id="tab-panels"></div>
     </div>
   `;
