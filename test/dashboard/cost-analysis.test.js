@@ -459,6 +459,219 @@ async function testAgentsTabFormatting() {
 }
 
 /**
+ * Test: renderAPIRequestsTab creates table with correct structure
+ */
+async function testAPIRequestsTabStructure() {
+  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockApiRequests = [
+    {
+      timestamp: 1712575200000000,
+      cost: 0.012,
+      tokens: 400,
+      model: 'claude-opus-4-6',
+      url: '/v1/messages',
+      status: 200,
+      durationMs: 2500
+    },
+    {
+      timestamp: 1712575260000000,
+      cost: 0.008,
+      tokens: 300,
+      model: 'claude-haiku-4-5-20251001',
+      url: '/v1/completions',
+      status: 200,
+      durationMs: 1800
+    }
+  ];
+
+  await renderAPIRequestsTab(container, mockApiRequests);
+
+  // Verify table structure
+  const table = container.querySelector('.requests-table');
+  assert(table, 'Table with class requests-table not found');
+
+  // Verify header
+  const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent);
+  const expectedHeaders = ['Timestamp', 'Cost', 'Tokens', 'Model'];
+  assert(headers.length === 4, `Expected 4 headers, got ${headers.length}`);
+  expectedHeaders.forEach((expected, idx) => {
+    assert(headers[idx] === expected, `Expected header "${expected}", got "${headers[idx]}"`);
+  });
+
+  // Verify rows
+  const rows = container.querySelectorAll('tbody tr.request-row');
+  assert(rows.length === 2, `Expected 2 request rows, got ${rows.length}`);
+
+  console.log('✓ testAPIRequestsTabStructure: table structure correct');
+}
+
+/**
+ * Test: renderAPIRequestsTab expandable rows
+ */
+async function testAPIRequestsTabExpandable() {
+  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockApiRequests = [
+    {
+      timestamp: 1712575200000000,
+      cost: 0.012,
+      tokens: 400,
+      model: 'claude-opus-4-6',
+      url: '/v1/messages',
+      status: 200,
+      durationMs: 2500
+    }
+  ];
+
+  await renderAPIRequestsTab(container, mockApiRequests);
+
+  // Find the request row
+  const requestRow = container.querySelector('tbody tr.request-row');
+  assert(requestRow, 'Request row not found');
+
+  // Find the detail row
+  const detailRow = requestRow.nextElementSibling;
+  assert(detailRow && detailRow.classList.contains('request-detail'), 'Detail row not found');
+
+  // Detail row should start hidden
+  assert(detailRow.style.display === 'none', `Expected detail row to be hidden, got display="${detailRow.style.display}"`);
+
+  // Simulate click
+  requestRow.click();
+
+  // After click, detail row should be visible
+  assert(detailRow.style.display !== 'none', `Expected detail row to be visible after click, got display="${detailRow.style.display}"`);
+
+  console.log('✓ testAPIRequestsTabExpandable: expandable rows work correctly');
+}
+
+/**
+ * Test: renderAPIRequestsTab formats data correctly
+ */
+async function testAPIRequestsTabFormatting() {
+  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockApiRequests = [
+    {
+      timestamp: 1712575200000000,
+      cost: 0.0123,
+      tokens: 5000,
+      model: 'claude-opus-4-6',
+      url: '/v1/messages',
+      status: 200,
+      durationMs: 2500
+    }
+  ];
+
+  await renderAPIRequestsTab(container, mockApiRequests);
+
+  // Verify cell content
+  const cells = container.querySelectorAll('tbody tr.request-row td');
+  assert(cells[1].textContent.includes('$'), `Expected cost to include $, got "${cells[1].textContent}"`);
+  assert(cells[2].textContent.match(/\d+K?/), `Expected tokens formatted, got "${cells[2].textContent}"`);
+  assert(cells[3].textContent === 'claude-opus-4-6', `Expected model "claude-opus-4-6", got "${cells[3].textContent}"`);
+
+  console.log('✓ testAPIRequestsTabFormatting: data formatted correctly');
+}
+
+/**
+ * Test: API requests detail panel content
+ */
+async function testAPIRequestsDetailContent() {
+  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockApiRequests = [
+    {
+      timestamp: 1712575200000000,
+      cost: 0.012,
+      tokens: 400,
+      model: 'claude-opus-4-6',
+      url: '/v1/messages',
+      status: 200,
+      durationMs: 2500,
+      error: null
+    }
+  ];
+
+  await renderAPIRequestsTab(container, mockApiRequests);
+
+  // Find and expand the detail row
+  const requestRow = container.querySelector('tbody tr.request-row');
+  requestRow.click();
+
+  // Check detail panel content
+  const detailRow = requestRow.nextElementSibling;
+  const detailPanel = detailRow.querySelector('.detail-panel');
+  assert(detailPanel, 'Detail panel not found');
+
+  const detailText = detailPanel.textContent;
+  assert(detailText.includes('URL'), 'URL label missing');
+  assert(detailText.includes('/v1/messages'), 'URL value missing from detail');
+  assert(detailText.includes('Status'), 'Status label missing');
+  assert(detailText.includes('200'), 'Status code missing from detail');
+  assert(detailText.includes('Duration'), 'Duration label missing');
+
+  console.log('✓ testAPIRequestsDetailContent: detail content rendered correctly');
+}
+
+/**
+ * Test: API requests sorting functionality
+ */
+async function testAPIRequestsSorting() {
+  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+
+  const mockApiRequests = [
+    {
+      timestamp: 1712575200000000,
+      cost: 0.012,
+      tokens: 400,
+      model: 'claude-opus-4-6',
+      url: '/v1/messages',
+      status: 200,
+      durationMs: 2500
+    },
+    {
+      timestamp: 1712575260000000,
+      cost: 0.008,
+      tokens: 300,
+      model: 'claude-haiku-4-5-20251001',
+      url: '/v1/completions',
+      status: 200,
+      durationMs: 1800
+    }
+  ];
+
+  await renderAPIRequestsTab(container, mockApiRequests);
+
+  // Get initial row order
+  let rows = container.querySelectorAll('tbody tr.request-row');
+  let initialOrder = Array.from(rows).map(r => r.querySelector('td:nth-child(4)').textContent);
+  assert(initialOrder[0] === 'claude-opus-4-6', 'Initial order should be by timestamp descending');
+
+  // Click Cost header to sort
+  const costHeader = container.querySelector('th[data-sort="cost"]');
+  costHeader.click();
+
+  // Verify sort changed
+  rows = container.querySelectorAll('tbody tr.request-row');
+  let sortedOrder = Array.from(rows).map(r => r.querySelector('td:nth-child(2)').textContent);
+  assert(sortedOrder[0].includes('0.008'), `Expected first row cost 0.008, got "${sortedOrder[0]}"`);
+
+  console.log('✓ testAPIRequestsSorting: sorting works correctly');
+}
+
+/**
  * Test: Verify agents detail panel content is rendered correctly
  */
 async function testAgentsDetailContent() {
@@ -537,6 +750,13 @@ async function runTests() {
     await testAgentsTabExpandable();
     await testAgentsTabFormatting();
     await testAgentsDetailContent();
+
+    console.log('\n--- API Requests Tab Tests ---');
+    await testAPIRequestsTabStructure();
+    await testAPIRequestsTabExpandable();
+    await testAPIRequestsTabFormatting();
+    await testAPIRequestsDetailContent();
+    await testAPIRequestsSorting();
 
     console.log('\n✅ All tests passed');
     process.exit(0);

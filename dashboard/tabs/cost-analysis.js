@@ -1,4 +1,4 @@
-import { get, fmt$, fmtTokens, fmtDate } from '../utils.js';
+import { get, fmt$, fmtTokens, fmtDate, fmtDuration } from '../utils.js';
 
 export async function render(el) {
   // Fetch all available sessions and current selection
@@ -128,8 +128,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
           } else if (tabName === 'agents') {
             renderAgentsTab(panel, subagentCosts);
           } else if (tabName === 'requests') {
-            // API requests tab rendering will be implemented in next task
-            panel.innerHTML = '<p class="placeholder">API request details coming soon...</p>';
+            renderAPIRequestsTab(panel, apiRequests);
           }
         }
       }
@@ -187,6 +186,96 @@ export async function renderSkillsTab(el, skillCosts) {
       }
     });
   });
+}
+
+/**
+ * Format duration in milliseconds to a readable string.
+ * @param {number|null|undefined} ms - Duration in milliseconds
+ */
+function fmtDurationMs(ms) {
+  if (!ms) return '—';
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Render the API Requests sub-tab with a table of API requests and sortable columns
+ * @param {HTMLElement} el - Container to render into
+ * @param {Array} apiRequests - Array of API request objects
+ */
+export async function renderAPIRequestsTab(el, apiRequests) {
+  let currentSort = { column: 'timestamp', ascending: false };
+
+  function renderTable(data) {
+    const html = `
+      <table class="requests-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="timestamp">Timestamp</th>
+            <th class="sortable" data-sort="cost">Cost</th>
+            <th class="sortable" data-sort="tokens">Tokens</th>
+            <th class="sortable" data-sort="model">Model</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.map(req => `
+            <tr class="request-row" data-timestamp="${req.timestamp}">
+              <td>${fmtDate(req.timestamp)}</td>
+              <td>${fmt$(req.cost)}</td>
+              <td>${fmtTokens(req.tokens)}</td>
+              <td>${req.model}</td>
+            </tr>
+            <tr class="request-detail" style="display: none;">
+              <td colspan="4">
+                <div class="detail-panel">
+                  <div><strong>URL:</strong> ${req.url}</div>
+                  <div><strong>Status:</strong> ${req.status}</div>
+                  <div><strong>Duration:</strong> ${fmtDurationMs(req.durationMs)}</div>
+                  ${req.error ? `<div class="error"><strong>Error:</strong> ${req.error}</div>` : ''}
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    el.innerHTML = html;
+
+    // Expandable rows
+    el.querySelectorAll('.request-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const detail = row.nextElementSibling;
+        if (detail && detail.classList.contains('request-detail')) {
+          detail.style.display = detail.style.display === 'none' ? '' : 'none';
+        }
+      });
+    });
+
+    // Sorting
+    el.querySelectorAll('th.sortable').forEach(header => {
+      header.addEventListener('click', () => {
+        const column = header.dataset.sort;
+        if (currentSort.column === column) {
+          currentSort.ascending = !currentSort.ascending;
+        } else {
+          currentSort.column = column;
+          currentSort.ascending = true;
+        }
+
+        const sorted = [...data].sort((a, b) => {
+          const aVal = a[column];
+          const bVal = b[column];
+          const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+          return currentSort.ascending ? cmp : -cmp;
+        });
+
+        renderTable(sorted);
+      });
+    });
+  }
+
+  renderTable(apiRequests);
 }
 
 /**
