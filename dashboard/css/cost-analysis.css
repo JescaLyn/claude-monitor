@@ -1,0 +1,213 @@
+/* Cost Analysis Dashboard Styling */
+
+/* Filter Section */
+.filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filters input {
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.filters input:focus {
+  outline: none;
+  border-color: #4f7df3;
+  box-shadow: 0 0 0 2px rgba(79, 125, 243, 0.1);
+}
+
+.filters button {
+  padding: 8px 16px;
+  background: #4f7df3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.filters button:hover {
+  background: #3d5fcf;
+}
+
+/* Table enhancements */
+table {
+  border-spacing: 0;
+}
+
+thead th {
+  background: #f8f9fa;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  user-select: none;
+}
+
+.sort-btn {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sort-btn:hover {
+  background: rgba(79, 125, 243, 0.05);
+  border-radius: 3px;
+}
+
+tbody tr {
+  transition: background-color 0.1s;
+}
+
+tbody tr:hover td {
+  background: #fafbfc;
+}
+
+tbody td {
+  vertical-align: middle;
+}
+
+/* Right-align numeric columns */
+td:last-child,
+th:last-child {
+  text-align: right;
+  padding-right: 20px;
+}
+
+/* Expandable detail rows */
+.detail-row {
+  display: none;
+}
+
+.detail-row.expanded {
+  display: table-row;
+}
+
+.detail-cell {
+  background: #fafbfc;
+  border-top: 1px solid #e9ecef;
+}
+
+.detail-panel {
+  padding: 16px;
+  background: #f8f9fa;
+  border-left: 3px solid #4f7df3;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.detail-panel dt {
+  font-weight: 600;
+  margin-top: 8px;
+  color: #1a1a2e;
+}
+
+.detail-panel dt:first-child {
+  margin-top: 0;
+}
+
+.detail-panel dd {
+  margin-left: 0;
+  color: #666;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+/* Pagination styling */
+.pagination {
+  justify-content: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .filters {
+    flex-direction: column;
+  }
+
+  .filters input,
+  .filters button {
+    width: 100%;
+  }
+
+  table {
+    font-size: 12px;
+  }
+
+  thead th,
+  tbody td {
+    padding: 8px 10px;
+  }
+
+  td:last-child,
+  th:last-child {
+    padding-right: 10px;
+  }
+
+  .mono {
+    font-size: 11px;
+  }
+}
+
+/* Dark theme support (if body has dark class) */
+body.dark .filters input {
+  background: #2a2a3e;
+  border-color: #444;
+  color: #fff;
+}
+
+body.dark .filters input:focus {
+  border-color: #4f7df3;
+  box-shadow: 0 0 0 2px rgba(79, 125, 243, 0.2);
+}
+
+body.dark .filters button {
+  background: #4f7df3;
+  color: #fff;
+}
+
+body.dark .filters button:hover {
+  background: #3d5fcf;
+}
+
+body.dark table {
+  background: #1a1a2e;
+}
+
+body.dark thead th {
+  background: #25253d;
+  color: #ccc;
+}
+
+body.dark tbody td {
+  color: #ddd;
+  border-bottom-color: #2a2a3e;
+}
+
+body.dark tbody tr:hover td {
+  background: #252537;
+}
+
+body.dark .detail-panel {
+  background: #25253d;
+  color: #ddd;
+}
+
+body.dark .detail-panel dt {
+  color: #fff;
+}
+
+body.dark .detail-panel dd {
+  color: #aaa;
+}
+
+body.dark .sort-btn:hover {
+  background: rgba(79, 125, 243, 0.15);
+}
