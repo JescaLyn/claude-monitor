@@ -121,3 +121,41 @@ export interface NormalizedMetricSnapshot {
   timeUnixNano: string;
   machineId: string;
 }
+
+export interface SkillCostBreakdown {
+  skill_name: string;
+  invocation_count: number;
+  api_request_count: number;
+  total_cost_usd: number;
+  total_context_tokens: number;
+  avg_context_token_ratio: number; // 0.0 to 1.0
+}
+
+export interface SubagentCostBreakdown {
+  invocation_count: number;
+  api_request_count: number;
+  total_cost_usd: number;
+}
+
+export interface ApiRequestDetail {
+  id: string;
+  ts: number;
+  session_id: string;
+  model: string;
+  input_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  duration_ms: number;
+  is_fast_mode: number;
+  prompt_length?: number;
+}
+
+export interface SessionToolBreakdown {
+  skill_costs: SkillCostBreakdown[];
+  subagent_costs: SubagentCostBreakdown;
+  api_requests: ApiRequestDetail[];
+  total_context_tokens: number;
+  context_token_ratio: number;
+}
