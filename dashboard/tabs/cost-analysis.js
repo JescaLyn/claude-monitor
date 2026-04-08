@@ -1,4 +1,16 @@
-import { get, fmt$, fmtTokens, fmtDate, fmtDuration } from '../utils.js';
+import { get, fmt$, fmtTokens, fmtDate } from '../utils.js';
+
+/**
+ * Escape HTML special characters to prevent XSS
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped HTML
+ */
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 export async function render(el) {
   // Fetch all available sessions and current selection
@@ -20,19 +32,19 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
     <div class="cost-analysis-container">
       <div class="cost-controls">
         <div class="control-group">
-          <label>Session</label>
+          <label for="session-select">Session</label>
           <select id="session-select">
             ${allSessions.map(s => `<option value="${s.id}" ${s.id === sessionId ? 'selected' : ''}>${s.name || s.id.slice(0, 8)}</option>`).join('')}
           </select>
         </div>
         <div class="control-group">
-          <label>Skill</label>
+          <label for="skill-filter">Skill</label>
           <select id="skill-filter">
             <option value="">All skills</option>
           </select>
         </div>
         <div class="control-group">
-          <label>Model</label>
+          <label for="model-filter">Model</label>
           <select id="model-filter">
             <option value="">All models</option>
           </select>
@@ -74,9 +86,8 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
     return;
   }
 
-  // Store session data for future tab switching and filtering
-  // This will be refactored into a closure in later tasks
-  window.costAnalysisData = { skillCosts, subagentCosts, apiRequests, sessionId };
+  // Store session data in DOM data attributes instead of window global
+  el.dataset.sessionId = sessionId;
 
   // Render summary cards
   const summaryCardsEl = document.getElementById('summary-cards');
@@ -165,6 +176,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
  * @param {Array} skillCosts - Array of skill cost objects
  */
 export async function renderSkillsTab(el, skillCosts) {
+  const maxCost = Math.max(...skillCosts.map(s => s.totalCost || 0));
   const html = `
     <table class="skills-table">
       <thead>
@@ -177,7 +189,6 @@ export async function renderSkillsTab(el, skillCosts) {
       </thead>
       <tbody>
         ${skillCosts.map(skill => {
-          const maxCost = Math.max(...skillCosts.map(s => s.totalCost || 0));
           const costPercentage = maxCost > 0 ? ((skill.totalCost || 0) / maxCost) * 100 : 0;
           const modelBadges = skill.models?.map(m => `<span class="model-badge ${getModelBadgeClass(m)}">${m}</span>`).join(' ') || 'N/A';
           return `
@@ -193,10 +204,10 @@ export async function renderSkillsTab(el, skillCosts) {
           <tr class="skill-detail" style="display: none;">
             <td colspan="4">
               <div class="detail-panel">
-                <div><strong>Time Window:</strong> ${skill.timeWindow || 'N/A'}</div>
-                <div><strong>Context Tokens:</strong> ${fmtTokens(skill.contextTokens || 0)}</div>
-                <div><strong>Models:</strong> ${modelBadges}</div>
-                <div><strong>Cost:</strong> ${fmt$(skill.detailCost || skill.totalCost)}</div>
+                <div>Time Window: ${escapeHtml(skill.timeWindow || 'N/A')}</div>
+                <div>Context Tokens: ${fmtTokens(skill.contextTokens || 0)}</div>
+                <div>Models: ${modelBadges}</div>
+                <div>Cost: ${fmt$(skill.detailCost || skill.totalCost)}</div>
               </div>
             </td>
           </tr>
@@ -210,7 +221,7 @@ export async function renderSkillsTab(el, skillCosts) {
 
   // Add click handlers for expand/collapse
   el.querySelectorAll('.skill-row').forEach(row => {
-    row.addEventListener('click', (e) => {
+    row.addEventListener('click', () => {
       const detailRow = row.nextElementSibling;
       if (detailRow && detailRow.classList.contains('skill-detail')) {
         detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
@@ -231,70 +242,108 @@ function fmtDurationMs(ms) {
 
 /**
  * Render the API Requests sub-tab with a table of API requests and sortable columns
+ * Separates filter UI from table body to prevent filter inputs from being wiped on sort
  * @param {HTMLElement} el - Container to render into
  * @param {Array} apiRequests - Array of API request objects
  */
 export async function renderAPIRequestsTab(el, apiRequests) {
-  let currentSort = { column: 'timestamp', ascending: false };
-  let filteredData = [...apiRequests];
+  let currentSort = { column: null, ascending: false };
+  let filterMin = 0;
+  let filterMax = Infinity;
 
-  function renderTable(data) {
-    const maxCost = Math.max(...data.map(req => req.cost || 0));
-    const html = `
-      <div class="cost-range-filter">
-        <div class="filter-input-group">
-          <label>Min Cost</label>
-          <input type="number" id="min-cost" placeholder="0.0000" step="0.0001" min="0">
-        </div>
-        <div class="filter-input-group">
-          <label>Max Cost</label>
-          <input type="number" id="max-cost" placeholder="∞" step="0.0001" min="0">
-        </div>
+  // Render filter UI once (never replaced)
+  const filterHtml = `
+    <div class="cost-range-filter">
+      <div class="filter-input-group">
+        <label for="min-cost">Min Cost</label>
+        <input type="number" id="min-cost" placeholder="0.0000" step="0.0001" min="0">
       </div>
-      <table class="requests-table">
-        <thead>
-          <tr>
-            <th class="sortable" data-sort="timestamp">Timestamp</th>
-            <th class="sortable" data-sort="cost">Cost</th>
-            <th class="sortable" data-sort="tokens">Tokens</th>
-            <th class="sortable" data-sort="model">Model</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data.map(req => {
-            const costPercentage = maxCost > 0 ? (req.cost / maxCost) * 100 : 0;
-            const modelName = req.model || 'Unknown';
-            const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${modelName}</span>`;
-            return `
-            <tr class="request-row" data-timestamp="${req.timestamp}">
-              <td>${fmtDate(req.timestamp)}</td>
-              <td class="cost-cell">
-                <div class="cost-bar" style="width: ${costPercentage}%"></div>
-                <span class="cost-value">${fmt$(req.cost)}</span>
-              </td>
-              <td>${fmtTokens(req.tokens)}</td>
-              <td>${modelBadge}</td>
-            </tr>
-            <tr class="request-detail" style="display: none;">
-              <td colspan="4">
-                <div class="detail-panel">
-                  <div><strong>URL:</strong> ${req.url}</div>
-                  <div><strong>Status:</strong> ${req.status}</div>
-                  <div><strong>Duration:</strong> ${fmtDurationMs(req.durationMs)}</div>
-                  ${req.error ? `<div class="error"><strong>Error:</strong> ${req.error}</div>` : ''}
-                </div>
-              </td>
-            </tr>
-          `;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
+      <div class="filter-input-group">
+        <label for="max-cost">Max Cost</label>
+        <input type="number" id="max-cost" placeholder="∞" step="0.0001" min="0">
+      </div>
+    </div>
+    <table class="requests-table">
+      <thead>
+        <tr>
+          <th class="sortable" data-sort="timestamp">Timestamp</th>
+          <th class="sortable" data-sort="cost">Cost</th>
+          <th class="sortable" data-sort="tokens">Tokens</th>
+          <th class="sortable" data-sort="model">Model</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  `;
 
-    el.innerHTML = html;
+  el.innerHTML = filterHtml;
 
-    // Expandable rows
-    el.querySelectorAll('.request-row').forEach(row => {
+  // Store references to reusable DOM elements
+  const table = el.querySelector('.requests-table');
+  const tbody = table.querySelector('tbody');
+  const minCostInput = el.querySelector('#min-cost');
+  const maxCostInput = el.querySelector('#max-cost');
+
+  /**
+   * Update table body with filtered and sorted data
+   * Only modifies tbody, leaving filter inputs and table headers intact
+   */
+  function updateTableBody() {
+    // Apply filter
+    const filtered = apiRequests.filter(req => {
+      const cost = req.cost || 0;
+      return cost >= filterMin && cost <= filterMax;
+    });
+
+    // Apply sort only if a column has been selected
+    let sorted = filtered;
+    if (currentSort.column !== null) {
+      sorted = [...filtered].sort((a, b) => {
+        const aVal = a[currentSort.column];
+        const bVal = b[currentSort.column];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return currentSort.ascending ? cmp : -cmp;
+      });
+    }
+
+    // Render only tbody
+    const maxCost = Math.max(...sorted.map(req => req.cost || 0));
+    tbody.innerHTML = sorted.map(req => {
+      const costPercentage = maxCost > 0 ? (req.cost / maxCost) * 100 : 0;
+      const modelName = req.model || 'Unknown';
+      const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${modelName}</span>`;
+      return `
+        <tr class="request-row" data-timestamp="${req.timestamp}">
+          <td>${fmtDate(req.timestamp)}</td>
+          <td class="cost-cell">
+            <div class="cost-bar" style="width: ${costPercentage}%"></div>
+            <span class="cost-value">${fmt$(req.cost)}</span>
+          </td>
+          <td>${fmtTokens(req.tokens)}</td>
+          <td>${modelBadge}</td>
+        </tr>
+        <tr class="request-detail" style="display: none;">
+          <td colspan="4">
+            <div class="detail-panel">
+              <div>URL: ${escapeHtml(req.url)}</div>
+              <div>Status: ${escapeHtml(String(req.status))}</div>
+              <div>Duration: ${fmtDurationMs(req.durationMs)}</div>
+              ${req.error ? `<div class="error">Error: ${escapeHtml(req.error)}</div>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Attach row click handlers for expand/collapse
+    attachRowHandlers();
+  }
+
+  /**
+   * Attach expand/collapse handlers to request rows
+   */
+  function attachRowHandlers() {
+    tbody.querySelectorAll('.request-row').forEach(row => {
       row.addEventListener('click', () => {
         const detail = row.nextElementSibling;
         if (detail && detail.classList.contains('request-detail')) {
@@ -302,52 +351,39 @@ export async function renderAPIRequestsTab(el, apiRequests) {
         }
       });
     });
-
-    // Cost range filtering
-    const minCostInput = el.querySelector('#min-cost');
-    const maxCostInput = el.querySelector('#max-cost');
-
-    if (minCostInput && maxCostInput) {
-      const applyFilter = () => {
-        const minCost = parseFloat(minCostInput.value) || 0;
-        const maxCost = parseFloat(maxCostInput.value) || Infinity;
-
-        filteredData = apiRequests.filter(req => {
-          const cost = req.cost || 0;
-          return cost >= minCost && cost <= maxCost;
-        });
-
-        renderTable(filteredData);
-      };
-
-      minCostInput.addEventListener('change', applyFilter);
-      maxCostInput.addEventListener('change', applyFilter);
-    }
-
-    // Sorting
-    el.querySelectorAll('th.sortable').forEach(header => {
-      header.addEventListener('click', () => {
-        const column = header.dataset.sort;
-        if (currentSort.column === column) {
-          currentSort.ascending = !currentSort.ascending;
-        } else {
-          currentSort.column = column;
-          currentSort.ascending = true;
-        }
-
-        const sorted = [...filteredData].sort((a, b) => {
-          const aVal = a[column];
-          const bVal = b[column];
-          const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-          return currentSort.ascending ? cmp : -cmp;
-        });
-
-        renderTable(sorted);
-      });
-    });
   }
 
-  renderTable(filteredData);
+  /**
+   * Handle filter input changes
+   */
+  minCostInput.addEventListener('change', () => {
+    filterMin = parseFloat(minCostInput.value) || 0;
+    updateTableBody();
+  });
+
+  maxCostInput.addEventListener('change', () => {
+    filterMax = parseFloat(maxCostInput.value) || Infinity;
+    updateTableBody();
+  });
+
+  /**
+   * Handle sort column clicks
+   */
+  el.querySelectorAll('th.sortable').forEach(header => {
+    header.addEventListener('click', () => {
+      const column = header.dataset.sort;
+      if (currentSort.column === column) {
+        currentSort.ascending = !currentSort.ascending;
+      } else {
+        currentSort.column = column;
+        currentSort.ascending = true;
+      }
+      updateTableBody();
+    });
+  });
+
+  // Initial render
+  updateTableBody();
 }
 
 /**
@@ -386,10 +422,10 @@ export async function renderAgentsTab(el, subagentCosts) {
           <tr class="agent-detail" style="display: none;">
             <td colspan="4">
               <div class="detail-panel">
-                <div><strong>Time Window:</strong> ${agent.timeWindow || 'N/A'}</div>
-                <div><strong>Context Tokens:</strong> ${fmtTokens(agent.contextTokens || 0)}</div>
-                <div><strong>Models:</strong> ${modelBadges}</div>
-                <div><strong>Cost:</strong> ${fmt$(agent.detailCost || agent.totalCost)}</div>
+                <div>Time Window: ${escapeHtml(agent.timeWindow || 'N/A')}</div>
+                <div>Context Tokens: ${fmtTokens(agent.contextTokens || 0)}</div>
+                <div>Models: ${modelBadges}</div>
+                <div>Cost: ${fmt$(agent.detailCost || agent.totalCost)}</div>
               </div>
             </td>
           </tr>
@@ -403,7 +439,7 @@ export async function renderAgentsTab(el, subagentCosts) {
 
   // Add click handlers for expand/collapse
   el.querySelectorAll('.agent-row').forEach(row => {
-    row.addEventListener('click', (e) => {
+    row.addEventListener('click', () => {
       const detailRow = row.nextElementSibling;
       if (detailRow && detailRow.classList.contains('agent-detail')) {
         detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
@@ -432,8 +468,8 @@ export async function renderSummaryCards(el, skillCosts, subagentCosts, apiReque
     ((contextTokens / totalTokens) * 100).toFixed(1) :
     0;
 
-  const skillCallCount = skillCosts.length;
-  const agentCallCount = Object.keys(subagentCosts).length;
+  const skillCallCount = skillCosts.reduce((sum, s) => sum + (s.callCount || 0), 0);
+  const agentCallCount = Object.values(subagentCosts).reduce((sum, a) => sum + (a.callCount || 0), 0);
   const apiRequestCount = apiRequests.length;
 
   // Render cards with context overhead card highlighted

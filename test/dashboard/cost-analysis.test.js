@@ -109,11 +109,11 @@ async function testCardValueFormatting() {
   const container = document.createElement('div');
 
   const skillCosts = [
-    { totalCost: 1.2345, totalTokens: 5000, contextTokens: 500 },
-    { totalCost: 0.5, totalTokens: 2000, contextTokens: 400 }
+    { totalCost: 1.2345, totalTokens: 5000, contextTokens: 500, callCount: 1 },
+    { totalCost: 0.5, totalTokens: 2000, contextTokens: 400, callCount: 1 }
   ];
   const subagentCosts = {
-    'agent-1': { totalCost: 0.25, totalTokens: 1500, contextTokens: 300 }
+    'agent-1': { totalCost: 0.25, totalTokens: 1500, contextTokens: 300, callCount: 1 }
   };
   const apiRequests = [{ id: 'r1' }, { id: 'r2' }];
 
@@ -769,6 +769,83 @@ async function testAPIRequestsSorting() {
 }
 
 /**
+ * Test: Issue A - Sorting preserves filter input values
+ */
+async function testAPIRequestsSortPreservesFilter() {
+  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+
+  const mockApiRequests = [
+    {
+      timestamp: 1712575200000000,
+      cost: 0.001,
+      tokens: 400,
+      model: 'claude-opus-4-6',
+      url: '/v1/messages',
+      status: 200,
+      durationMs: 2500
+    },
+    {
+      timestamp: 1712575260000000,
+      cost: 0.005,
+      tokens: 300,
+      model: 'claude-haiku-4-5-20251001',
+      url: '/v1/completions',
+      status: 200,
+      durationMs: 1800
+    },
+    {
+      timestamp: 1712575320000000,
+      cost: 0.020,
+      tokens: 500,
+      model: 'claude-sonnet-4-6',
+      url: '/v1/other',
+      status: 200,
+      durationMs: 2000
+    }
+  ];
+
+  await renderAPIRequestsTab(container, mockApiRequests);
+
+  // Set filter values
+  const minCostInput = container.querySelector('#min-cost');
+  const maxCostInput = container.querySelector('#max-cost');
+
+  minCostInput.value = '0.003';
+  minCostInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+  maxCostInput.value = '0.010';
+  maxCostInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+  // Verify filter values are preserved in inputs
+  assert(minCostInput.value === '0.003', `Expected min cost 0.003, got "${minCostInput.value}"`);
+  assert(maxCostInput.value === '0.010', `Expected max cost 0.010, got "${maxCostInput.value}"`);
+
+  // Verify only one row matches the filter (0.005)
+  let rows = container.querySelectorAll('tbody tr.request-row');
+  assert(rows.length === 1, `Expected 1 row after filter, got ${rows.length}`);
+  assert(rows[0].querySelector('td:nth-child(2)').textContent.includes('0.005'), 'Expected filtered row to be 0.005');
+
+  // Now click Cost header to sort
+  const costHeader = container.querySelector('th[data-sort="cost"]');
+  costHeader.click();
+
+  // Verify filter input values are STILL preserved (Issue A fix)
+  assert(minCostInput.value === '0.003', `Filter min lost after sort: expected 0.003, got "${minCostInput.value}"`);
+  assert(maxCostInput.value === '0.010', `Filter max lost after sort: expected 0.010, got "${maxCostInput.value}"`);
+
+  // Verify filtered data is still shown
+  rows = container.querySelectorAll('tbody tr.request-row');
+  assert(rows.length === 1, `Expected 1 row after sort (filter still applied), got ${rows.length}`);
+  assert(rows[0].querySelector('td:nth-child(2)').textContent.includes('0.005'), 'Expected filtered row to still be 0.005 after sort');
+
+  document.body.removeChild(container);
+  console.log('✓ testAPIRequestsSortPreservesFilter: filter inputs preserved on sort (Issue A fixed)');
+}
+
+/**
  * Test: Verify agents detail panel content is rendered correctly
  */
 async function testAgentsDetailContent() {
@@ -856,6 +933,7 @@ async function runTests() {
     await testAPIRequestsTabFormatting();
     await testAPIRequestsDetailContent();
     await testAPIRequestsSorting();
+    await testAPIRequestsSortPreservesFilter();
 
     console.log('\n✅ All tests passed');
     process.exit(0);
