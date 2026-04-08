@@ -1,4 +1,4 @@
-import { get, fmt$, fmtTokens } from '/utils.js';
+import { get, fmt$ } from '/utils.js';
 
 export async function render(el) {
   // Fetch all available sessions and current selection
@@ -21,7 +21,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
       <div class="cost-controls">
         <div class="control-group">
           <label>Session</label>
-          <select id="session-select" onchange="window.costAnalysisSessionChange(this.value)">
+          <select id="session-select">
             ${allSessions.map(s => `<option value="${s.id}" ${s.id === sessionId ? 'selected' : ''}>${s.name || s.id.slice(0, 8)}</option>`).join('')}
           </select>
         </div>
@@ -35,9 +35,6 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
           <label>Model</label>
           <select id="model-filter">
             <option value="">All models</option>
-            <option>sonnet</option>
-            <option>haiku</option>
-            <option>opus</option>
           </select>
         </div>
       </div>
@@ -46,11 +43,12 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
       <div class="context-bar" id="context-bar"></div>
 
       <div class="section-tabs">
-        <button class="section-tab active" onclick="window.costAnalysisShowTab('skills')">Skills <span class="tab-count">0</span></button>
-        <button class="section-tab" onclick="window.costAnalysisShowTab('agents')">Agents <span class="tab-count">0</span></button>
-        <button class="section-tab" onclick="window.costAnalysisShowTab('requests')">API Requests <span class="tab-count">0</span></button>
+        <button class="section-tab active" data-tab="skills">Skills <span class="tab-count">0</span></button>
+        <button class="section-tab" data-tab="agents">Agents <span class="tab-count">0</span></button>
+        <button class="section-tab" data-tab="requests">API Requests <span class="tab-count">0</span></button>
       </div>
 
+      <!-- Tab content will be populated in future tasks (Task 3+) -->
       <div class="tab-panels" id="tab-panels"></div>
     </div>
   `;
@@ -58,10 +56,42 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
   el.innerHTML = html;
 
   // Fetch data for selected session
-  const skillCosts = await get('/skills/costs');
-  const subagentCosts = await get('/subagents/costs');
-  const apiRequests = await get('/requests');
+  let skillCosts = [];
+  let subagentCosts = {};
+  let apiRequests = [];
 
-  // Store data globally for tab switching (will be moved to closure in later tasks)
+  try {
+    const results = await Promise.all([
+      get('/skills/costs'),
+      get('/subagents/costs'),
+      get('/requests')
+    ]);
+    skillCosts = results[0] || [];
+    subagentCosts = results[1] || {};
+    apiRequests = results[2] || [];
+  } catch (err) {
+    console.error('Error fetching cost analysis data:', err);
+    el.innerHTML = `<p class="error">Error loading cost analysis: ${err.message}</p>`;
+    return;
+  }
+
+  // Store session data for future tab switching and filtering
+  // This will be refactored into a closure in later tasks
   window.costAnalysisData = { skillCosts, subagentCosts, apiRequests, sessionId };
+
+  // Attach event listeners for session change and tab switching
+  document.getElementById('session-select')?.addEventListener('change', (e) => {
+    const newSessionId = e.target.value;
+    renderCostAnalysis(el, newSessionId, allSessions);
+  });
+
+  document.querySelectorAll('.section-tab').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const tabName = e.target.dataset.tab;
+      if (tabName) {
+        // Tab switching logic will be implemented in future tasks
+        console.log('Tab:', tabName);
+      }
+    });
+  });
 }
