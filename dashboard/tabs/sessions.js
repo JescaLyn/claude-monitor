@@ -111,6 +111,11 @@ function attachNameEdit(el) {
       });
       input.addEventListener('blur', commit);
     });
+
+    cell.addEventListener('dblclick', () => {
+      const sessionId = cell.dataset.id;
+      showSessionDetail(sessionId);
+    });
   });
 }
 
@@ -146,4 +151,150 @@ async function renderPage(el, offset, sort = 'started_at', order = 'desc') {
 
 export async function render(el) {
   await renderPage(el, 0);
+  attachDetailModal();
+}
+
+function attachDetailModal() {
+  const detailModal = document.createElement('div');
+  detailModal.id = 'session-detail-modal';
+  detailModal.style.display = 'none';
+  detailModal.style.position = 'fixed';
+  detailModal.style.top = '0';
+  detailModal.style.left = '0';
+  detailModal.style.width = '100%';
+  detailModal.style.height = '100%';
+  detailModal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+  detailModal.style.zIndex = '1000';
+  document.body.appendChild(detailModal);
+
+  detailModal.addEventListener('click', (e) => {
+    if (e.target === detailModal) {
+      detailModal.style.display = 'none';
+    }
+  });
+}
+
+async function showSessionDetail(sessionId) {
+  const breakdown = await get(`/api/sessions/${encodeURIComponent(sessionId)}/breakdown`);
+  const modal = document.getElementById('session-detail-modal');
+
+  const content = document.createElement('div');
+  content.style.backgroundColor = 'white';
+  content.style.padding = '20px';
+  content.style.borderRadius = '8px';
+  content.style.maxWidth = '90%';
+  content.style.maxHeight = '90vh';
+  content.style.overflowY = 'auto';
+  content.style.margin = '5vh auto';
+
+  content.innerHTML = `
+    <h2>Session Detail</h2>
+
+    <h3>Skills</h3>
+    ${breakdown.skill_costs.length > 0 ? `
+      <table>
+        <thead>
+          <tr>
+            <th>Skill</th>
+            <th>Calls</th>
+            <th>API Requests</th>
+            <th>Cost</th>
+            <th>Context Tokens</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${breakdown.skill_costs.map(s => `
+            <tr>
+              <td>${s.skill_name}</td>
+              <td>${s.invocation_count}</td>
+              <td>${s.api_request_count}</td>
+              <td>${fmt$(s.total_cost_usd)}</td>
+              <td>${s.total_context_tokens}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    ` : '<p>No skills invoked in this session.</p>'}
+
+    <h3>Subagents</h3>
+    ${breakdown.subagent_costs.invocation_count > 0 ? `
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Invocations</td>
+            <td>${breakdown.subagent_costs.invocation_count}</td>
+          </tr>
+          <tr>
+            <td>API Requests</td>
+            <td>${breakdown.subagent_costs.api_request_count}</td>
+          </tr>
+          <tr>
+            <td>Total Cost</td>
+            <td>${fmt$(breakdown.subagent_costs.total_cost_usd)}</td>
+          </tr>
+        </tbody>
+      </table>
+    ` : '<p>No subagents invoked in this session.</p>'}
+
+    <h3>Context Overhead</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Total Context Tokens</td>
+          <td>${breakdown.total_context_tokens}</td>
+        </tr>
+        <tr>
+          <td>Context Token Ratio</td>
+          <td>${(breakdown.context_token_ratio * 100).toFixed(2)}%</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>API Requests (${breakdown.api_requests.length})</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Input</th>
+          <th>Cache Read</th>
+          <th>Cache Create</th>
+          <th>Output</th>
+          <th>Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${breakdown.api_requests.map(r => `
+          <tr>
+            <td>${r.model}</td>
+            <td>${r.input_tokens}</td>
+            <td>${r.cache_read_tokens}</td>
+            <td>${r.cache_creation_tokens}</td>
+            <td>${r.output_tokens}</td>
+            <td>${fmt$(r.cost_usd)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <button id="close-detail" style="margin-top: 20px; padding: 8px 16px; cursor: pointer;">Close</button>
+  `;
+
+  modal.innerHTML = '';
+  modal.appendChild(content);
+  modal.style.display = 'block';
+  content.querySelector('#close-detail').addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
 }

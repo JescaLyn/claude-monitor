@@ -179,3 +179,74 @@ describe('GET /api/cost/by-day', () => {
     expect(res.body[0].api_request_count).toBe(1);
   });
 });
+
+describe('GET /api/skills/costs', () => {
+  it('returns skill costs with request counts', async () => {
+    const res = await supertest(app).get('/api/skills/costs');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    // Sample data has no skills, so should be empty
+    expect(res.body).toHaveLength(0);
+  });
+});
+
+describe('GET /api/subagents/costs', () => {
+  it('returns subagent costs', async () => {
+    const res = await supertest(app).get('/api/subagents/costs');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('invocation_count');
+    expect(res.body).toHaveProperty('api_request_count');
+    expect(res.body).toHaveProperty('total_cost_usd');
+  });
+});
+
+describe('GET /api/requests', () => {
+  it('returns API requests', async () => {
+    const res = await supertest(app).get('/api/requests');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toHaveProperty('model');
+    expect(res.body[0]).toHaveProperty('cost_usd');
+  });
+
+  it('filters requests by model', async () => {
+    const res = await supertest(app).get('/api/requests?model=claude-sonnet-4-6');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].model).toBe('claude-sonnet-4-6');
+  });
+
+  it('filters requests by non-existent model', async () => {
+    const res = await supertest(app).get('/api/requests?model=claude-nonexistent');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveLength(0);
+  });
+
+  it('respects limit and offset', async () => {
+    const res = await supertest(app).get('/api/requests?limit=1&offset=0');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('GET /api/sessions/:id/breakdown', () => {
+  it('returns session breakdown with skills and requests', async () => {
+    const res = await supertest(app).get('/api/sessions/bf9aefc7-1d4c-4385-b5df-bd161e0c1ded/breakdown');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('skill_costs');
+    expect(res.body).toHaveProperty('api_requests');
+    expect(Array.isArray(res.body.skill_costs)).toBe(true);
+    expect(Array.isArray(res.body.api_requests)).toBe(true);
+    expect(res.body.api_requests).toHaveLength(1);
+  });
+
+  it('returns 404 for unknown session', async () => {
+    const res = await supertest(app).get('/api/sessions/nonexistent-session/breakdown');
+    expect(res.status).toBe(404);
+    expect(res.body).toHaveProperty('error');
+  });
+});

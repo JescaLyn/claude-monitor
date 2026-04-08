@@ -4,6 +4,8 @@ import type Database from 'better-sqlite3';
 import {
   getOverview, getSessions, getSession, getToolStats, getSkillStats,
   getCostByDay, getCostByModel, getCostByMachine, setSessionName,
+  getSkillCostsWithRequests, getSubagentCostsWithRequests,
+  getApiRequests, getSessionBreakdown,
 } from './queries.js';
 import { resolveSessionName } from '../session-names.js';
 import type { SessionRow } from './queries.js';
@@ -84,6 +86,41 @@ export function createApiRouter(db: Database.Database): Router {
 
   router.get('/cost/by-machine', (_req, res) => {
     res.json(getCostByMachine(db));
+  });
+
+  router.get('/skills/costs', (_req, res) => {
+    const costs = getSkillCostsWithRequests(db);
+    res.json(costs);
+  });
+
+  router.get('/subagents/costs', (_req, res) => {
+    const costs = getSubagentCostsWithRequests(db);
+    res.json(costs);
+  });
+
+  router.get('/requests', (req, res) => {
+    const filters = {
+      model: req.query.model ? String(req.query.model) : undefined,
+      sessionId: req.query.sessionId ? String(req.query.sessionId) : undefined,
+      minCost: req.query.minCost ? parseFloat(String(req.query.minCost)) : 0,
+      maxCost: req.query.maxCost ? parseFloat(String(req.query.maxCost)) : Infinity,
+      minDate: req.query.minDate ? parseInt(String(req.query.minDate), 10) : 0,
+      maxDate: req.query.maxDate ? parseInt(String(req.query.maxDate), 10) : Infinity,
+      isFastMode: req.query.isFastMode ? parseInt(String(req.query.isFastMode), 10) : undefined,
+      limit: req.query.limit ? parseInt(String(req.query.limit), 10) : 100,
+      offset: req.query.offset ? parseInt(String(req.query.offset), 10) : 0,
+    };
+    const requests = getApiRequests(db, filters);
+    res.json(requests);
+  });
+
+  router.get('/sessions/:id/breakdown', (req, res) => {
+    const breakdown = getSessionBreakdown(db, req.params.id);
+    if (!breakdown.api_requests || breakdown.api_requests.length === 0) {
+      res.status(404).json({ error: 'session not found' });
+      return;
+    }
+    res.json(breakdown);
   });
 
   return router;

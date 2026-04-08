@@ -184,16 +184,10 @@ export function getSkillCostsWithRequests(db: Database.Database): SkillCostBreak
       COUNT(DISTINCT te.id) AS invocation_count,
       COUNT(DISTINCT ar.id) AS api_request_count,
       COALESCE(SUM(ar.cost_usd), 0) AS total_cost_usd,
-      COALESCE(
-        SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)),
-        0
-      ) AS total_context_tokens,
+      COALESCE(SUM(ar.input_tokens), 0) AS total_context_tokens,
       CASE
         WHEN SUM(ar.input_tokens) > 0
-        THEN ROUND(
-          SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)) /
-          CAST(SUM(ar.input_tokens) AS REAL), 4
-        )
+        THEN ROUND(SUM(ar.input_tokens) / CAST(SUM(ar.input_tokens) AS REAL), 4)
         ELSE 0
       END AS avg_context_token_ratio
     FROM tool_events te
@@ -202,7 +196,6 @@ export function getSkillCostsWithRequests(db: Database.Database): SkillCostBreak
       AND ar.ts >= te.ts
       AND ar.ts <= te.ts + (te.duration_ms * 1000)
     )
-    LEFT JOIN user_prompts up ON ar.prompt_id = up.prompt_id
     WHERE te.tool_name = 'Skill' AND te.skill_name IS NOT NULL
     GROUP BY te.skill_name
     ORDER BY total_cost_usd DESC
@@ -305,16 +298,10 @@ export function getSessionBreakdown(
       COUNT(DISTINCT te.id) AS invocation_count,
       COUNT(DISTINCT ar.id) AS api_request_count,
       COALESCE(SUM(ar.cost_usd), 0) AS total_cost_usd,
-      COALESCE(
-        SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)),
-        0
-      ) AS total_context_tokens,
+      COALESCE(SUM(ar.input_tokens), 0) AS total_context_tokens,
       CASE
         WHEN SUM(ar.input_tokens) > 0
-        THEN ROUND(
-          SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)) /
-          CAST(SUM(ar.input_tokens) AS REAL), 4
-        )
+        THEN ROUND(SUM(ar.input_tokens) / CAST(SUM(ar.input_tokens) AS REAL), 4)
         ELSE 0
       END AS avg_context_token_ratio
     FROM tool_events te
@@ -323,7 +310,6 @@ export function getSessionBreakdown(
       AND ar.ts >= te.ts
       AND ar.ts <= te.ts + (te.duration_ms * 1000)
     )
-    LEFT JOIN user_prompts up ON ar.prompt_id = up.prompt_id
     WHERE te.session_id = ? AND te.tool_name = 'Skill' AND te.skill_name IS NOT NULL
     GROUP BY te.skill_name
     ORDER BY total_cost_usd DESC
@@ -368,13 +354,9 @@ export function getSessionBreakdown(
   // Calculate total context tokens and ratio for session
   const contextResult = db.prepare(`
     SELECT
-      COALESCE(
-        SUM(ar.input_tokens - CAST(COALESCE(up.prompt_length, 0) / 4 AS INTEGER)),
-        0
-      ) AS total_context_tokens,
+      COALESCE(SUM(ar.input_tokens), 0) AS total_context_tokens,
       SUM(ar.input_tokens) AS total_input_tokens
     FROM api_requests ar
-    LEFT JOIN user_prompts up ON ar.prompt_id = up.prompt_id
     WHERE ar.session_id = ?
   `).get(sessionId) as { total_context_tokens: number; total_input_tokens: number } | undefined;
 
