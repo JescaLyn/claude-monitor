@@ -112,6 +112,14 @@ thead th {
   border-bottom: 1px solid #e9ecef;
 }
 
+thead th button {
+  margin: -10px -14px;
+  padding: 10px 14px;
+  width: calc(100% + 28px);
+  text-align: left;
+  display: block;
+}
+
 tbody td {
   padding: 10px 14px;
   border-bottom: 1px solid #f0f2f5;
@@ -123,6 +131,37 @@ tbody tr:hover td { background: #f8f9fa; }
 .mono {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
+}
+
+.muted {
+  color: #999;
+}
+
+.sort-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: inherit;
+  padding: 0;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.15s;
+}
+
+.sort-btn:hover {
+  color: #4f7df3;
+}
+
+.session-name {
+  cursor: pointer;
+  position: relative;
+}
+
+.session-name:hover {
+  background: #f0f7ff;
 }
 
 /* Pagination */

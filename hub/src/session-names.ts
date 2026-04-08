@@ -6,16 +6,51 @@ const cache = new Map<string, string | null>();
 
 export function resolveSessionName(
   sessionId: string,
-  baseDir: string = join(homedir(), '.claude', 'projects')
+  baseDir: string = join(homedir(), '.claude', 'projects'),
+  sessionsDir: string = join(homedir(), '.claude', 'sessions')
 ): string | null {
   if (cache.has(sessionId)) return cache.get(sessionId) ?? null;
-  const result = findSlug(sessionId, baseDir);
-  cache.set(sessionId, result);
-  return result;
+
+  // First, try to find user-set name in ~/.claude/sessions/*.json
+  const userSetName = findUserSetName(sessionId, sessionsDir);
+  if (userSetName) {
+    cache.set(sessionId, userSetName);
+    return userSetName;
+  }
+
+  // Fall back to auto-generated slug from JSONL
+  const slug = findSlug(sessionId, baseDir);
+  cache.set(sessionId, slug);
+  return slug;
 }
 
 export function clearSessionNameCache(): void {
   cache.clear();
+}
+
+function findUserSetName(sessionId: string, sessionsDir: string): string | null {
+  if (!existsSync(sessionsDir)) return null;
+  let sessionFiles: string[];
+  try {
+    sessionFiles = readdirSync(sessionsDir, { withFileTypes: true })
+      .filter(e => e.isFile() && e.name.endsWith('.json'))
+      .map(e => join(sessionsDir, e.name));
+  } catch {
+    return null;
+  }
+
+  for (const filePath of sessionFiles) {
+    try {
+      const content = readFileSync(filePath, 'utf8');
+      const record = JSON.parse(content) as Record<string, unknown>;
+      if (record.sessionId === sessionId && typeof record.name === 'string' && record.name.length > 0) {
+        return record.name;
+      }
+    } catch {
+      // skip malformed files
+    }
+  }
+  return null;
 }
 
 function findSlug(sessionId: string, baseDir: string): string | null {
