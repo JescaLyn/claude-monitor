@@ -1,16 +1,10 @@
 import { render as renderOverview } from '/tabs/overview.js';
 import { render as renderSessions } from '/tabs/sessions.js';
-import { render as renderCost }     from '/tabs/cost.js';
-import { render as renderSkills }   from '/tabs/skills.js';
-import { render as renderTools }    from '/tabs/tools.js';
 import { render as renderCostAnalysis } from '/tabs/cost-analysis.js';
 
 const TABS = {
   overview: renderOverview,
   sessions: renderSessions,
-  cost:     renderCost,
-  skills:   renderSkills,
-  tools:    renderTools,
   'cost-analysis': renderCostAnalysis,
 };
 
