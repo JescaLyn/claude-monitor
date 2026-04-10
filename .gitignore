@@ -1,0 +1,38 @@
+# Node.js
+node_modules/
+package-lock.json
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Hub data
+hub/data/
+hub/sessions.db
+
+# Temporary/cache directories
+.claude/
+.superpowers/
+
+# Documentation drafts
+docs/superpowers/plans/
+
+# Logs
+logs/
+
+# Test fixtures
+test/fixtures/
+
+# Hub build artifacts
+hub/node_modules/
+hub/dist/
+hub/build/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
