@@ -33,6 +33,11 @@
 }
 
 .control-group {
+  flex: 1;
+  min-width: 200px;
+}
+
+.control-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -56,6 +61,7 @@
   background: var(--bg-surface);
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
 }
 
 .control-group select:focus {
