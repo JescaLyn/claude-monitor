@@ -33,7 +33,6 @@ apiApp.use(express.json());
 apiApp.use('/api', createApiRouter(db));
 apiApp.listen(API_PORT, () => {
   console.log(`[hub] REST API + dashboard listening on :${API_PORT}`);
-  console.log(`[hub] Dashboard: http://localhost:${API_PORT}/`);
 });
 
 process.on('SIGTERM', () => {

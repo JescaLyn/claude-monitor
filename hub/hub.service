@@ -1,18 +1,27 @@
 [Unit]
-Description=Claude Monitor Hub
+Description=Claude Monitor Hub — receives telemetry from Claude Code clients
+Documentation=file:///opt/claude-monitor/DEPLOYMENT.md
 After=network.target
 
 [Service]
 Type=simple
-User=jessica
-WorkingDirectory=/home/jessica/claude-monitor/hub
+
+# Customize User and paths below for your installation
+User=claude-monitor
+WorkingDirectory=/opt/claude-monitor/hub
+
 ExecStart=/usr/bin/node --import tsx/esm src/index.ts
 Restart=on-failure
 RestartSec=5
+
 Environment=NODE_ENV=production
-Environment=DB_PATH=/home/jessica/claude-monitor/data/monitor.db
+Environment=DB_PATH=/var/lib/claude-monitor/data/monitor.db
 Environment=OTLP_PORT=4318
 Environment=API_PORT=3001
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=claude-monitor
 
 [Install]
 WantedBy=multi-user.target
