@@ -394,6 +394,7 @@ export function getCostByModel(db: Database.Database): CostByModel[] {
       SUM(input_tokens)  AS input_tokens,
       SUM(output_tokens) AS output_tokens
     FROM api_requests
+    WHERE model != '<synthetic>'
     GROUP BY model
     ORDER BY cost_usd DESC
   `).all() as CostByModel[];
@@ -432,7 +433,7 @@ export function getModelBreakdownForSession(db: Database.Database, sessionId: st
       COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
       COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
     FROM api_requests
-    WHERE session_id = ?
+    WHERE session_id = ? AND model != '<synthetic>'
     GROUP BY model
     ORDER BY total_cost_usd DESC
   `).all(sessionId) as ModelBreakdown[];
