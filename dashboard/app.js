@@ -26,8 +26,27 @@ async function showTab(name) {
 
 nav.addEventListener('click', e => {
   const tab = e.target.closest('button')?.dataset.tab;
-  if (tab) showTab(tab);
+  if (tab && TABS[tab]) {
+    // Clear URL params when clicking nav (other than preserving session param for cost-analysis)
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session');
+    if (tab === 'cost-analysis' && sessionId) {
+      window.history.pushState({}, '', `/?tab=${tab}&session=${encodeURIComponent(sessionId)}`);
+    } else {
+      window.history.pushState({}, '', `/?tab=${tab}`);
+    }
+    showTab(tab);
+  }
 });
 
-// Load the Overview tab on startup
-showTab('overview');
+// Theme toggle
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+});
+
+// Load the appropriate tab on startup (from URL param or default to overview)
+const params = new URLSearchParams(window.location.search);
+const initialTab = (params.get('tab') && TABS[params.get('tab')]) ? params.get('tab') : 'overview';
+showTab(initialTab);

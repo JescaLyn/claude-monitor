@@ -23,6 +23,7 @@ export interface SessionRow {
   model: string | null;
   started_at: number;
   ended_at: number | null;
+  last_event_ts: number | null;
   cost_usd: number;
   input_tokens: number;
   output_tokens: number;
@@ -79,13 +80,14 @@ export function getOverview(db: Database.Database): OverviewStats {
   `).get() as OverviewStats;
 }
 
-const VALID_SORT_FIELDS = new Set(['started_at', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count']);
+const VALID_SORT_FIELDS = new Set(['started_at', 'last_event_ts', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count']);
 const VALID_ORDERS = new Set(['asc', 'desc']);
 
 // Qualify table-column sorts with alias to avoid ambiguity in the JOIN query.
-// Aggregate alias columns (tool_call_count, api_request_count) are referenced by alias.
+// Aggregate alias columns (tool_call_count, api_request_count, last_event_ts) are referenced by alias.
 const SORT_EXPR: Record<string, string> = {
   started_at:        's.started_at',
+  last_event_ts:     'last_event_ts',
   cost_usd:          's.cost_usd',
   machine_id:        's.machine_id',
   tool_call_count:   'tool_call_count',
@@ -96,7 +98,7 @@ export function getSessions(
   db: Database.Database,
   limit = 50,
   offset = 0,
-  sort = 'started_at',
+  sort = 'last_event_ts',
   order = 'desc'
 ): SessionRow[] {
   if (!VALID_SORT_FIELDS.has(sort)) throw new Error(`Invalid sort field: ${sort}`);
@@ -108,7 +110,8 @@ export function getSessions(
       s.cost_usd, s.input_tokens, s.output_tokens,
       s.cache_read_tokens, s.cache_creation_tokens,
       COUNT(DISTINCT ar.id) AS api_request_count,
-      COUNT(DISTINCT te.id) AS tool_call_count
+      COUNT(DISTINCT te.id) AS tool_call_count,
+      MAX(COALESCE(ar.ts, te.ts)) AS last_event_ts
     FROM sessions s
     LEFT JOIN api_requests ar ON ar.session_id = s.id
     LEFT JOIN tool_events   te ON te.session_id = s.id
@@ -125,7 +128,8 @@ export function getSession(db: Database.Database, id: string): SessionRow | null
       s.cost_usd, s.input_tokens, s.output_tokens,
       s.cache_read_tokens, s.cache_creation_tokens,
       COUNT(DISTINCT ar.id) AS api_request_count,
-      COUNT(DISTINCT te.id) AS tool_call_count
+      COUNT(DISTINCT te.id) AS tool_call_count,
+      MAX(COALESCE(ar.ts, te.ts)) AS last_event_ts
     FROM sessions s
     LEFT JOIN api_requests ar ON ar.session_id = s.id
     LEFT JOIN tool_events   te ON te.session_id = s.id
@@ -193,8 +197,7 @@ export function getSkillCostsWithRequests(db: Database.Database): SkillCostBreak
     FROM tool_events te
     LEFT JOIN api_requests ar ON (
       ar.session_id = te.session_id
-      AND ar.ts >= te.ts
-      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+      AND ar.prompt_id = te.prompt_id
     )
     WHERE te.tool_name = 'Skill' AND te.skill_name IS NOT NULL
     GROUP BY te.skill_name
@@ -211,8 +214,7 @@ export function getSubagentCostsWithRequests(db: Database.Database): SubagentCos
     FROM tool_events te
     LEFT JOIN api_requests ar ON (
       ar.session_id = te.session_id
-      AND ar.ts >= te.ts
-      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+      AND ar.prompt_id = te.prompt_id
     )
     WHERE te.tool_name = 'Agent'
   `).get() as SubagentCostBreakdown | undefined;
@@ -307,8 +309,7 @@ export function getSessionBreakdown(
     FROM tool_events te
     LEFT JOIN api_requests ar ON (
       ar.session_id = te.session_id
-      AND ar.ts >= te.ts
-      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+      AND ar.prompt_id = te.prompt_id
     )
     WHERE te.session_id = ? AND te.tool_name = 'Skill' AND te.skill_name IS NOT NULL
     GROUP BY te.skill_name
@@ -324,8 +325,7 @@ export function getSessionBreakdown(
     FROM tool_events te
     LEFT JOIN api_requests ar ON (
       ar.session_id = te.session_id
-      AND ar.ts >= te.ts
-      AND ar.ts <= te.ts + (te.duration_ms * 1000)
+      AND ar.prompt_id = te.prompt_id
     )
     WHERE te.session_id = ? AND te.tool_name = 'Agent'
   `).get(sessionId) as SubagentCostBreakdown | undefined;
@@ -409,4 +409,31 @@ export function getCostByMachine(db: Database.Database): CostByMachine[] {
     GROUP BY machine_id
     ORDER BY cost_usd DESC
   `).all() as CostByMachine[];
+}
+
+export interface ModelBreakdown {
+  model: string;
+  api_request_count: number;
+  total_cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+}
+
+export function getModelBreakdownForSession(db: Database.Database, sessionId: string): ModelBreakdown[] {
+  return db.prepare(`
+    SELECT
+      model,
+      COUNT(*) AS api_request_count,
+      COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+      COALESCE(SUM(input_tokens), 0) AS input_tokens,
+      COALESCE(SUM(output_tokens), 0) AS output_tokens,
+      COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+      COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
+    FROM api_requests
+    WHERE session_id = ?
+    GROUP BY model
+    ORDER BY total_cost_usd DESC
+  `).all(sessionId) as ModelBreakdown[];
 }

@@ -1,19 +1,52 @@
-/* Cost Analysis Dashboard Styling - Light Theme (Option C) */
+/* Cost Analysis Dashboard Styling */
 
 /* Color Palette */
 :root {
   --bg-primary: #f8f9fa;
   --bg-surface: #ffffff;
+  --bg-row-alt: #fafbfc;
+  --bg-row-hover: #f0f7ff;
+  --bg-head: #f7fafc;
+  --bg-detail: #f7fafc;
   --border-color: #e2e8f0;
+  --border-row: #f0f2f5;
   --text-primary: #1a202c;
   --text-muted: #718096;
   --accent-blue: #3182ce;
   --accent-blue-light: #ebf8ff;
   --accent-orange: #dd6b20;
   --accent-orange-light: #fffaf0;
+  --accent-orange-border: #fed7aa;
   --accent-green: #38a169;
   --accent-purple: #805ad5;
   --accent-red: #c53030;
+  --cost-bar-bg: rgba(49, 130, 206, 0.08);
+  --sortable-hover-bg: rgba(49, 130, 206, 0.05);
+  --focus-ring: rgba(49, 130, 206, 0.1);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1c1f26;
+  --bg-surface: #272b34;
+  --bg-row-alt: #242832;
+  --bg-row-hover: #2e3647;
+  --bg-head: #2d313b;
+  --bg-detail: #2d313b;
+  --border-color: #383d49;
+  --border-row: #2d313b;
+  --text-primary: #c9d1d9;
+  --text-muted: #8a93a3;
+  --accent-blue: #7aa2f7;
+  --accent-blue-light: rgba(122, 162, 247, 0.14);
+  --accent-orange: #e5a062;
+  --accent-orange-light: rgba(229, 160, 98, 0.1);
+  --accent-orange-border: rgba(229, 160, 98, 0.3);
+  --accent-green: #98c379;
+  --accent-purple: #c678dd;
+  --accent-red: #e06c75;
+  --cost-bar-bg: rgba(122, 162, 247, 0.12);
+  --sortable-hover-bg: rgba(122, 162, 247, 0.08);
+  --focus-ring: rgba(122, 162, 247, 0.22);
 }
 
 /* Cost Analysis Container */
@@ -67,7 +100,7 @@
 .control-group select:focus {
   outline: none;
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.1);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 /* Summary Cards Section */
@@ -131,7 +164,7 @@
 /* Context Bar - Orange warning banner */
 .context-bar {
   background: var(--accent-orange-light);
-  border: 1px solid #fed7aa;
+  border: 1px solid var(--accent-orange-border);
   border-radius: 6px;
   padding: 12px 16px;
   margin-bottom: 24px;
@@ -254,7 +287,7 @@
 .filter-input-group input:focus {
   outline: none;
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.1);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 /* Tables */
@@ -266,7 +299,7 @@ table {
 }
 
 thead {
-  background: #f7fafc;
+  background: var(--bg-head);
 }
 
 thead th {
@@ -283,7 +316,7 @@ thead th {
 
 tbody td {
   padding: 10px 14px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--border-row);
   vertical-align: middle;
   color: var(--text-primary);
 }
@@ -293,15 +326,15 @@ tbody tr {
 }
 
 tbody tr:nth-child(even) td {
-  background: #ffffff;
+  background: var(--bg-surface);
 }
 
 tbody tr:nth-child(odd) td {
-  background: #fafbfc;
+  background: var(--bg-row-alt);
 }
 
 tbody tr:hover td {
-  background: #f0f7ff;
+  background: var(--bg-row-hover);
   cursor: pointer;
 }
 
@@ -324,7 +357,7 @@ th:last-child {
 }
 
 .sortable:hover {
-  background: rgba(49, 130, 206, 0.05);
+  background: var(--sortable-hover-bg);
   color: var(--accent-blue);
 }
 
@@ -333,7 +366,7 @@ th:last-child {
 .agent-detail,
 .request-detail {
   display: none;
-  background: #f7fafc;
+  background: var(--bg-detail);
 }
 
 .skill-detail.expanded,
@@ -343,13 +376,13 @@ th:last-child {
 }
 
 .detail-cell {
-  background: #f7fafc;
+  background: var(--bg-detail);
   border-top: 1px solid var(--border-color);
 }
 
 .detail-panel {
   padding: 16px;
-  background: #f7fafc;
+  background: var(--bg-detail);
   border-left: 3px solid var(--accent-blue);
   border-radius: 4px;
   font-size: 12px;
@@ -406,7 +439,7 @@ th:last-child {
   top: 0;
   left: 0;
   height: 100%;
-  background: rgba(49, 130, 206, 0.08);
+  background: var(--cost-bar-bg);
   border-radius: 2px;
   pointer-events: none;
   z-index: 0;

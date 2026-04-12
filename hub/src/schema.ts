@@ -71,4 +71,16 @@ export const MIGRATIONS: string[] = [
 
   // Migration 1: add human-readable name to sessions
   `ALTER TABLE sessions ADD COLUMN name TEXT;`,
+
+  // Migration 2: add project column and parse_state table for JSONL ingestion
+  `
+  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS project TEXT;
+
+  CREATE TABLE IF NOT EXISTS parse_state (
+    file_path   TEXT PRIMARY KEY,
+    byte_offset INTEGER NOT NULL DEFAULT 0,
+    file_size   INTEGER NOT NULL DEFAULT 0,
+    mtime       TEXT NOT NULL DEFAULT ''
+  );
+  `,
 ];

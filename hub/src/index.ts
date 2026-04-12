@@ -5,6 +5,7 @@ import express from 'express';
 import { openDb } from './db.js';
 import { createReceiver } from './receiver.js';
 import { createApiRouter } from './api/router.js';
+import { startJsonlWatcher } from './jsonl/watcher.js';
 
 const OTLP_PORT = parseInt(process.env.OTLP_PORT ?? '4318', 10);
 const API_PORT  = parseInt(process.env.API_PORT  ?? '3001', 10);
@@ -15,6 +16,9 @@ const DASHBOARD_DIR = join(__dirname, '..', '..', 'dashboard');
 
 mkdirSync('./data', { recursive: true });
 const db = openDb(DB_PATH);
+
+// Start JSONL file watcher for all Claude Code surfaces (IDE, web, desktop, CLI)
+startJsonlWatcher(db);
 
 // OTLP receiver — accepts Claude Code telemetry (direct or forwarded from satellite)
 const receiver = createReceiver(db);

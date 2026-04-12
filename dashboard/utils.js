@@ -49,6 +49,45 @@ export function fmtDate(microseconds) {
 }
 
 /**
+ * Format a microsecond timestamp as a human-readable local date/time without seconds.
+ * @param {number|null|undefined} microseconds
+ */
+export function fmtDateNoSeconds(microseconds) {
+  if (!microseconds) return '—';
+  const date = new Date(microseconds / 1000);
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
+/**
+ * Split a microsecond timestamp into a short date and a short time,
+ * for rendering stacked inside narrow table cells. Year is omitted
+ * when it matches the current year.
+ * @param {number|null|undefined} microseconds
+ * @returns {{date: string, time: string}}
+ */
+export function fmtDateParts(microseconds) {
+  if (!microseconds) return { date: '—', time: '' };
+  const d = new Date(microseconds / 1000);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = String(d.getDate()).padStart(2, '0');
+  const date = sameYear ? `${month} ${day}` : `${month} ${day} ${d.getFullYear()}`;
+  const time = d.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  return { date, time };
+}
+
+/**
  * Format elapsed time between two microsecond timestamps.
  * Returns 'active' if endUs is null/undefined.
  * @param {number} startUs
