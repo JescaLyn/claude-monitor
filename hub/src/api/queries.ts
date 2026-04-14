@@ -438,3 +438,74 @@ export function getModelBreakdownForSession(db: Database.Database, sessionId: st
     ORDER BY total_cost_usd DESC
   `).all(sessionId) as ModelBreakdown[];
 }
+
+export interface RateLimitSnapshot {
+  id: string;
+  machine_id: string;
+  ts: number;
+  model: string;
+  requests_limit: number | null;
+  requests_remaining: number | null;
+  requests_reset_at: string | null;
+  input_tokens_limit: number | null;
+  input_tokens_remaining: number | null;
+  input_tokens_reset_at: string | null;
+  output_tokens_limit: number | null;
+  output_tokens_remaining: number | null;
+  output_tokens_reset_at: string | null;
+  polling_cost_usd: number;
+}
+
+export function insertRateLimitSnapshots(db: Database.Database, snapshots: RateLimitSnapshot[]): void {
+  if (snapshots.length === 0) return;
+
+  const insert = db.transaction((snaps: RateLimitSnapshot[]) => {
+    const stmt = db.prepare(`
+      INSERT INTO rate_limit_snapshots (
+        id, machine_id, ts, model,
+        requests_limit, requests_remaining, requests_reset_at,
+        input_tokens_limit, input_tokens_remaining, input_tokens_reset_at,
+        output_tokens_limit, output_tokens_remaining, output_tokens_reset_at,
+        polling_cost_usd
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const snap of snaps) {
+      stmt.run(
+        snap.id, snap.machine_id, snap.ts, snap.model,
+        snap.requests_limit, snap.requests_remaining, snap.requests_reset_at,
+        snap.input_tokens_limit, snap.input_tokens_remaining, snap.input_tokens_reset_at,
+        snap.output_tokens_limit, snap.output_tokens_remaining, snap.output_tokens_reset_at,
+        snap.polling_cost_usd
+      );
+    }
+  });
+
+  insert(snapshots);
+}
+
+export function getLatestRateLimits(db: Database.Database, limit = 100): RateLimitSnapshot[] {
+  return db.prepare(`
+    SELECT * FROM rate_limit_snapshots
+    ORDER BY ts DESC
+    LIMIT ?
+  `).all(limit) as RateLimitSnapshot[];
+}
+
+export function getRateLimitsByMachine(db: Database.Database, machineId: string, limit = 100): RateLimitSnapshot[] {
+  return db.prepare(`
+    SELECT * FROM rate_limit_snapshots
+    WHERE machine_id = ?
+    ORDER BY ts DESC
+    LIMIT ?
+  `).all(machineId, limit) as RateLimitSnapshot[];
+}
+
+export function getTotalPollingCost(db: Database.Database, daysBack = 30): number {
+  const result = db.prepare(`
+    SELECT COALESCE(SUM(polling_cost_usd), 0) as total
+    FROM rate_limit_snapshots
+    WHERE ts >= strftime('%s', 'now', '-' || ? || ' days') * 1000000
+  `).get(daysBack) as { total: number } | undefined;
+  return result?.total ?? 0;
+}

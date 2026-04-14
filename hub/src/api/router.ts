@@ -6,9 +6,10 @@ import {
   getCostByDay, getCostByModel, getCostByMachine, setSessionName,
   getSkillCostsWithRequests, getSubagentCostsWithRequests,
   getApiRequests, getSessionBreakdown, getModelBreakdownForSession,
+  insertRateLimitSnapshots, getLatestRateLimits, getRateLimitsByMachine, getTotalPollingCost,
 } from './queries.js';
 import { resolveSessionName } from '../session-names.js';
-import type { SessionRow } from './queries.js';
+import type { SessionRow, RateLimitSnapshot } from './queries.js';
 
 // Enrich a session with dynamically-resolved name
 function enrichSessionWithName(session: SessionRow): SessionRow {
@@ -126,6 +127,57 @@ export function createApiRouter(db: Database.Database): Router {
   router.get('/sessions/:id/models', (req, res) => {
     const models = getModelBreakdownForSession(db, req.params.id);
     res.json(models);
+  });
+
+  // Rate limit polling endpoints
+  router.post('/rate-limits', (req, res) => {
+    const snapshots = req.body;
+    if (!Array.isArray(snapshots)) {
+      res.status(400).json({ error: 'Expected array of rate limit snapshots' });
+      return;
+    }
+    if (snapshots.length === 0) {
+      res.status(400).json({ error: 'Expected at least one snapshot' });
+      return;
+    }
+    if (snapshots.length > 1000) {
+      res.status(400).json({ error: 'Too many snapshots (max 1000)' });
+      return;
+    }
+    // Validate required fields on first snapshot as a spot check
+    const first = snapshots[0] as any;
+    if (!first.id || !first.machine_id || typeof first.ts !== 'number' || !first.model) {
+      res.status(400).json({ error: 'Missing required fields: id, machine_id, ts, model' });
+      return;
+    }
+    try {
+      insertRateLimitSnapshots(db, snapshots as RateLimitSnapshot[]);
+      res.json({ ok: true, count: snapshots.length });
+    } catch (err) {
+      console.error('[api] Error inserting rate limit snapshots:', err);
+      res.status(500).json({ error: 'Failed to insert snapshots' });
+    }
+  });
+
+  router.get('/rate-limits', (req, res) => {
+    const rawLimit = parseInt(String(req.query.limit ?? '100'), 10);
+    const limit = Math.min(isNaN(rawLimit) ? 100 : rawLimit, 500);
+    const snapshots = getLatestRateLimits(db, limit);
+    res.json(snapshots);
+  });
+
+  router.get('/rate-limits/machine/:machineId', (req, res) => {
+    const rawLimit = parseInt(String(req.query.limit ?? '100'), 10);
+    const limit = Math.min(isNaN(rawLimit) ? 100 : rawLimit, 500);
+    const snapshots = getRateLimitsByMachine(db, req.params.machineId, limit);
+    res.json(snapshots);
+  });
+
+  router.get('/rate-limits/polling-cost', (req, res) => {
+    const rawDays = parseInt(String(req.query.days ?? '30'), 10);
+    const days = Math.min(isNaN(rawDays) ? 30 : rawDays, 365);
+    const totalCost = getTotalPollingCost(db, days);
+    res.json({ total_polling_cost_usd: totalCost, days });
   });
 
   return router;

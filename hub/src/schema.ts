@@ -83,4 +83,28 @@ export const MIGRATIONS: string[] = [
     mtime       TEXT NOT NULL DEFAULT ''
   );
   `,
+
+  // Migration 3: add rate_limit_snapshots for polling rate limit data
+  `
+  CREATE TABLE IF NOT EXISTS rate_limit_snapshots (
+    id                    TEXT PRIMARY KEY,
+    machine_id            TEXT NOT NULL,
+    ts                    INTEGER NOT NULL,
+    model                 TEXT NOT NULL,
+    requests_limit        INTEGER,
+    requests_remaining    INTEGER,
+    requests_reset_at     TEXT,
+    input_tokens_limit    INTEGER,
+    input_tokens_remaining INTEGER,
+    input_tokens_reset_at TEXT,
+    output_tokens_limit   INTEGER,
+    output_tokens_remaining INTEGER,
+    output_tokens_reset_at TEXT,
+    polling_cost_usd      REAL NOT NULL DEFAULT 0
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_rate_limit_snapshots_machine ON rate_limit_snapshots(machine_id);
+  CREATE INDEX IF NOT EXISTS idx_rate_limit_snapshots_ts ON rate_limit_snapshots(ts);
+  CREATE INDEX IF NOT EXISTS idx_rate_limit_snapshots_model ON rate_limit_snapshots(model);
+  `,
 ];
