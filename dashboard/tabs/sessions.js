@@ -1,6 +1,32 @@
 import { get, fmt$, fmtTokens, fmtDate, fmtDateNoSeconds, fmtDateParts, fmtDuration, escapeHtml } from '/utils.js';
 
 const LIMIT = 20;
+const DEFAULT_HOURS = 24;  // Default: show sessions active in the last 24 hours
+
+function getTimeThreshold(hours) {
+  if (!hours || hours === 0) return 0;  // 0 means "all time"
+  const now = Date.now() * 1000;  // microseconds
+  return now - (hours * 60 * 60 * 1000000);
+}
+
+function buildFilterControl(hours) {
+  const options = [
+    { value: '24', label: 'Last 24 hours' },
+    { value: '48', label: 'Last 48 hours' },
+    { value: '168', label: 'Last 7 days' },
+    { value: '720', label: 'Last 30 days' },
+    { value: '0', label: 'All time' },
+  ];
+  const selected = String(hours);
+  return `
+    <div class="sessions-filter">
+      <label>Activity:</label>
+      <select id="time-range-select">
+        ${options.map(o => `<option value="${o.value}" ${selected === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
 
 function nameCell(row) {
   if (row.name) {
@@ -22,9 +48,9 @@ function dateCell(microseconds) {
   return `<td class="date-cell"><div class="date-main">${date}</div><div class="date-sub">${time}</div></td>`;
 }
 
-function buildTable(rows, offset, sort, order) {
-  if (rows.length === 0 && offset === 0) {
-    return '<p class="empty">No sessions recorded yet.</p>';
+function buildTable(rows, offset, sort, order, totalCount = rows.length) {
+  if (totalCount === 0 && offset === 0) {
+    return '<p class="empty">No sessions in this time range.</p>';
   }
 
   return `
@@ -63,7 +89,7 @@ function buildTable(rows, offset, sort, order) {
     </table>
     <div class="pagination">
       <button id="prev-btn" ${offset === 0 ? 'disabled' : ''}>← Prev</button>
-      <span>${rows.length === 0 ? 'No more rows' : `Rows ${offset + 1}–${offset + rows.length}`}</span>
+      <span>${rows.length === 0 ? 'No more rows' : `Rows ${offset + 1}–${offset + rows.length} of ${totalCount}`}</span>
       <button id="next-btn" ${rows.length < LIMIT ? 'disabled' : ''}>Next →</button>
     </div>
   `;
@@ -176,27 +202,47 @@ function attachNameHandlers(el) {
   });
 }
 
-async function renderPage(el, offset, sort = 'last_event_ts', order = 'desc') {
-  const rows = await get(`/sessions?limit=${LIMIT}&offset=${offset}&sort=${sort}&order=${order}`);
-  el.innerHTML = buildTable(rows, offset, sort, order);
+async function renderPage(el, offset, sort = 'last_event_ts', order = 'desc', hours = DEFAULT_HOURS) {
+  const allRows = await get(`/sessions?limit=200&offset=0&sort=${sort}&order=${order}`);
+  const threshold = getTimeThreshold(hours);
+  const filteredRows = allRows.filter(r => !r.last_event_ts || r.last_event_ts >= threshold);
+
+  // Re-apply pagination after filtering
+  const paginatedRows = filteredRows.slice(offset, offset + LIMIT);
+
+  el.innerHTML = buildFilterControl(hours) + buildTable(paginatedRows, offset, sort, order, filteredRows.length);
 
   loadModelsForRows(el);
   attachNameHandlers(el);
 
+  const timeSelect = el.querySelector('#time-range-select');
+  if (timeSelect) {
+    timeSelect.addEventListener('change', () => {
+      const newHours = parseInt(timeSelect.value, 10);
+      renderPage(el, 0, sort, order, newHours);
+    });
+  }
+
   el.querySelectorAll('.sort-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      renderPage(el, 0, btn.dataset.field, btn.dataset.order);
+      const timeSelect = el.querySelector('#time-range-select');
+      const hours = timeSelect ? parseInt(timeSelect.value, 10) : DEFAULT_HOURS;
+      renderPage(el, 0, btn.dataset.field, btn.dataset.order, hours);
     });
   });
 
-  el.querySelector('#prev-btn')?.addEventListener('click', () =>
-    renderPage(el, Math.max(0, offset - LIMIT), sort, order)
-  );
-  el.querySelector('#next-btn')?.addEventListener('click', () =>
-    renderPage(el, offset + LIMIT, sort, order)
-  );
+  el.querySelector('#prev-btn')?.addEventListener('click', () => {
+    const timeSelect = el.querySelector('#time-range-select');
+    const hours = timeSelect ? parseInt(timeSelect.value, 10) : DEFAULT_HOURS;
+    renderPage(el, Math.max(0, offset - LIMIT), sort, order, hours);
+  });
+  el.querySelector('#next-btn')?.addEventListener('click', () => {
+    const timeSelect = el.querySelector('#time-range-select');
+    const hours = timeSelect ? parseInt(timeSelect.value, 10) : DEFAULT_HOURS;
+    renderPage(el, offset + LIMIT, sort, order, hours);
+  });
 }
 
 export async function render(el) {
-  await renderPage(el, 0);
+  await renderPage(el, 0, 'last_event_ts', 'desc', DEFAULT_HOURS);
 }

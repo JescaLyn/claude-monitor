@@ -488,6 +488,44 @@ thead th.th-center button.sort-btn {
   background: var(--bg-hover);
 }
 
+/* Sessions Filter */
+.sessions-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border-radius: 6px;
+}
+
+.sessions-filter label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.sessions-filter select {
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-input, var(--bg-surface));
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sessions-filter select:hover {
+  border-color: var(--border-active);
+}
+
+.sessions-filter select:focus {
+  outline: none;
+  border-color: var(--accent-color, #0066cc);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
 /* Chart */
 .chart-container {
   background: var(--bg-surface);
