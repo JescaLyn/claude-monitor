@@ -25,6 +25,11 @@ export function ingestJsonlEntries(
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  const upsertSubagentSession = db.prepare(`
+    INSERT OR IGNORE INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)
+  `);
+
   const refreshSession = db.prepare(`
     UPDATE sessions SET
       cost_usd              = (SELECT COALESCE(SUM(cost_usd), 0)              FROM api_requests WHERE session_id = ? AND (agent_id IS NULL OR agent_id = ?)),
@@ -33,8 +38,8 @@ export function ingestJsonlEntries(
       cache_read_tokens     = (SELECT COALESCE(SUM(cache_read_tokens), 0)     FROM api_requests WHERE session_id = ? AND (agent_id IS NULL OR agent_id = ?)),
       cache_creation_tokens = (SELECT COALESCE(SUM(cache_creation_tokens), 0) FROM api_requests WHERE session_id = ? AND (agent_id IS NULL OR agent_id = ?)),
       api_request_count     = (SELECT COUNT(*) FROM api_requests WHERE session_id = ? AND (agent_id IS NULL OR agent_id = ?)),
-      tool_call_count       = (SELECT COUNT(*) FROM tool_events WHERE session_id = ? OR parent_session_id = ?),
-      last_event_ts         = (SELECT MAX(ts) FROM (SELECT ts FROM api_requests WHERE session_id = ? AND (agent_id IS NULL OR agent_id = ?) UNION ALL SELECT ts FROM tool_events WHERE session_id = ? OR parent_session_id = ?))
+      tool_call_count       = (SELECT COUNT(*) FROM tool_events WHERE session_id = ?),
+      last_event_ts         = (SELECT MAX(ts) FROM (SELECT ts FROM api_requests WHERE session_id = ? AND (agent_id IS NULL OR agent_id = ?) UNION ALL SELECT ts FROM tool_events WHERE session_id = ?))
     WHERE id = ?
   `);
 
@@ -48,18 +53,17 @@ export function ingestJsonlEntries(
     const affectedSessions = new Set<string>();
     const subagentIds = new Set<string>();
 
-    // First pass: process api_requests and collect parent session/project info
-    let parentSessionId: string | null = null;
-    let project: string = '';
+    // Extract metadata from first entry (all entries in a batch share the same project/parent)
+    const project = entries.length > 0 ? extractProject(entries[0].cwd) : '';
+    const parentSessionId = filePath ? extractParentSessionId(filePath) : null;
 
+    // First pass: process api_requests and collect parent session/project info
     for (const entry of entries) {
       const sessionId = entry.sessionId;
       affectedSessions.add(sessionId);
 
       // Upsert session
       const startedAtMs = new Date(entry.timestamp).getTime();
-      project = extractProject(entry.cwd);
-      parentSessionId = filePath ? extractParentSessionId(filePath) : null;
       upsertSession.run(sessionId, machineId, entry.message?.model ?? 'unknown', startedAtMs, project, parentSessionId);
 
       // Insert api_request
@@ -96,26 +100,21 @@ export function ingestJsonlEntries(
     // Create synthetic subagent sessions from agentId entries
     for (const subagentId of subagentIds) {
       // Create subagent session if it doesn't exist
-      // Use a generated model name based on agentId for display
-      const subagentModel = `subagent-${subagentId.slice(0, 8)}`;
-      const mainSessionId = Array.from(affectedSessions).find(sid => !subagentIds.has(sid)) || Array.from(affectedSessions)[0];
-      const upsertSubagent = db.prepare(`
-        INSERT OR IGNORE INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts)
-        VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)
-      `);
-      upsertSubagent.run(subagentId, machineId, subagentModel, now, project, mainSessionId, now);
+      // Store null as model for synthetic subagent sessions
+      upsertSubagentSession.run(subagentId, machineId, null, now, project, parentSessionId, now);
       affectedSessions.add(subagentId);
     }
 
     // Refresh aggregates for all affected sessions (parent + subagents)
-    const mainSessionId = Array.from(affectedSessions).find(s => !subagentIds.has(s)) || Array.from(affectedSessions)[0];
     for (const sid of affectedSessions) {
       const isSubagent = subagentIds.has(sid);
       const filterId = isSubagent ? sid : null;
-      // refreshSession.run needs: cost_usd(sid, filterid), input_tokens(sid, filterid), ..., tool_call_count(sid, parentid), ..., where(id)
+      // refreshSession.run needs: cost_usd(sid, filterid), input_tokens(sid, filterid), output_tokens(sid, filterid),
+      // cache_read_tokens(sid, filterid), cache_creation_tokens(sid, filterid), api_request_count(sid, filterid),
+      // tool_call_count(sid), last_event_ts(sid, filterid, sid), where(id)
       refreshSession.run(
         sid, filterId, sid, filterId, sid, filterId, sid, filterId, sid, filterId,
-        sid, filterId, sid, mainSessionId, sid, filterId, sid, mainSessionId, sid
+        sid, filterId, sid, filterId, sid, sid
       );
     }
   });
