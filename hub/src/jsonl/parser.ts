@@ -5,6 +5,7 @@ export interface JsonlEntry {
   timestamp: string;
   type: string;
   costUSD: number;
+  agentId?: string;
   message?: {
     id: string;
     model: string;
@@ -125,6 +126,7 @@ function normalizeEntry(raw: unknown): JsonlEntry | null {
     timestamp: obj.timestamp as string,
     type: 'assistant',
     costUSD: (obj.costUSD as number) ?? 0,
+    agentId: obj.agentId as string | undefined,
     message: {
       id: message.id as string,
       model: (message.model as string) ?? 'unknown',
