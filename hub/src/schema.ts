@@ -120,4 +120,10 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sessions ADD COLUMN tool_call_count INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE sessions ADD COLUMN last_event_ts INTEGER;
   `,
+
+  // Migration 6: add agentId to api_requests for subagent tracking
+  `
+  ALTER TABLE api_requests ADD COLUMN agent_id TEXT;
+  CREATE INDEX IF NOT EXISTS idx_api_requests_agent ON api_requests(agent_id);
+  `,
 ];
