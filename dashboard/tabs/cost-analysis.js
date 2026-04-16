@@ -5,8 +5,7 @@ export async function render(el) {
   const params = new URLSearchParams(window.location.search);
   const sessionFromUrl = params.get('session');
 
-  // Fetch all available sessions
-  // TODO: add pagination/infinite scroll if > 50 sessions; currently uses default API limit
+  // Fetch all available sessions (top-level only, no subagents)
   const sessions = await get('/sessions');
 
   if (sessions.length === 0) {
@@ -21,14 +20,20 @@ export async function render(el) {
   const sessionExists = sessions.some(s => s.id === selectedSession);
   const sessionToUse = sessionExists ? selectedSession : sessions[0].id;
 
-  // Initial render with selected session
-  await renderCostAnalysis(el, sessionToUse, sessions);
+  // Initial render with selected session and no subagent
+  await renderCostAnalysis(el, sessionToUse, null, sessions);
 }
 
-async function renderCostAnalysis(el, sessionId, allSessions) {
+async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
+  // Fetch subagent sessions for the selected main session
+  let subagentSessions = [];
+  try {
+    subagentSessions = await get(`/sessions/${sessionId}/subagents`);
+  } catch (err) {
+    console.error('Error fetching subagent sessions:', err);
+  }
+
   // Create main container
-  // Note: Model filter was replaced with Tool filter; Skill filter remains for filtering by skill.
-  // Session-level model breakdown is shown separately (see renderModelsSection)
   const html = `
     <div class="cost-analysis-container">
       <div class="cost-controls">
@@ -38,18 +43,15 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
             ${allSessions.map(s => `<option value="${escapeHtml(s.id)}" ${s.id === sessionId ? 'selected' : ''}>${escapeHtml(s.name || s.id.slice(0, 8))}</option>`).join('')}
           </select>
         </div>
+        ${subagentSessions.length > 0 ? `
         <div class="control-group">
-          <label for="skill-filter">Skill</label>
-          <select id="skill-filter">
-            <option value="">All Skills</option>
+          <label for="subagent-select">Subagent</label>
+          <select id="subagent-select">
+            <option value="">All Subagents</option>
+            ${subagentSessions.map(s => `<option value="${escapeHtml(s.id)}" ${s.id === subagentId ? 'selected' : ''}>${escapeHtml(s.model || s.id.slice(0, 8))}</option>`).join('')}
           </select>
         </div>
-        <div class="control-group">
-          <label for="tool-filter">Tool</label>
-          <select id="tool-filter">
-            <option value="">All Tools</option>
-          </select>
-        </div>
+        ` : ''}
       </div>
 
       <div class="summary-cards" id="summary-cards"></div>
@@ -57,7 +59,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
 
       <div class="section-tabs">
         <button class="section-tab active" data-tab="skills">Skills <span class="tab-count">0</span></button>
-        <button class="section-tab" data-tab="agents">Agents <span class="tab-count">0</span></button>
+        ${subagentSessions.length > 0 && !subagentId ? `<button class="section-tab" data-tab="agents">Agents <span class="tab-count">0</span></button>` : ''}
         <button class="section-tab" data-tab="requests">API Requests <span class="tab-count">0</span></button>
       </div>
 
@@ -67,7 +69,7 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
 
   el.innerHTML = html;
 
-  // Fetch data for selected session
+  // Fetch data for selected session or subagent
   let skillCosts = [];
   let subagentCosts = {};
   let apiRequests = [];
@@ -75,8 +77,8 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
 
   try {
     const [breakdown, modelsData] = await Promise.all([
-      get(`/sessions/${sessionId}/breakdown`),
-      get(`/sessions/${sessionId}/models`)
+      subagentId ? get(`/sessions/${subagentId}/breakdown`) : get(`/sessions/${sessionId}/breakdown`),
+      subagentId ? get(`/sessions/${subagentId}/models`) : get(`/sessions/${sessionId}/models`)
     ]);
     skillCosts = breakdown.skill_costs || [];
     subagentCosts = breakdown.subagent_costs || {};
@@ -88,87 +90,24 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
     return;
   }
 
-  // Store session data in DOM data attributes instead of window global
+  // Store session data in DOM data attributes
   el.dataset.sessionId = sessionId;
+  el.dataset.subagentId = subagentId || '';
+  el.dataset.subagentSessions = JSON.stringify(subagentSessions);
 
-  // Populate skill filter dropdown
-  const skillSelect = document.getElementById('skill-filter');
-  if (skillSelect) {
-    skillCosts.forEach(skill => {
-      const option = document.createElement('option');
-      option.value = skill.skill_name;
-      option.textContent = skill.skill_name;
-      skillSelect.appendChild(option);
-    });
+  // No filter dropdowns - render all data
+
+  // Render summary cards with all data
+  const summaryCardsEl = document.getElementById('summary-cards');
+  if (summaryCardsEl) {
+    renderSummaryCards(summaryCardsEl, skillCosts, subagentCosts, apiRequests);
   }
 
-  // Populate tool filter dropdown
-  const toolSelect = document.getElementById('tool-filter');
-  if (toolSelect && subagentCosts.invocation_count > 0) {
-    const option = document.createElement('option');
-    option.value = 'agents';
-    option.textContent = 'Agents';
-    toolSelect.appendChild(option);
-  }
-
-  // Function to render display based on current filter selections
-  function renderFilteredDisplay() {
-    const selectedSkill = skillSelect?.value || '';
-    const selectedTool = toolSelect?.value || '';
-
-    // Filter data based on selections
-    const filteredSkillCosts = selectedSkill
-      ? skillCosts.filter(s => s.skill_name === selectedSkill)
-      : skillCosts;
-
-    const filteredSubagentCosts = selectedTool === 'agents' ? subagentCosts : { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 };
-    const filteredApiRequests = apiRequests; // API requests aren't filtered by skill in breakdown
-
-    // Render summary cards with filtered data
-    const summaryCardsEl = document.getElementById('summary-cards');
-    if (summaryCardsEl) {
-      renderSummaryCards(summaryCardsEl, filteredSkillCosts, filteredSubagentCosts, filteredApiRequests);
-    }
-
-    // Update tab counts based on filter
-    document.querySelectorAll('.section-tab').forEach(btn => {
-      const tabName = btn.dataset.tab;
-      const countEl = btn.querySelector('.tab-count');
-      if (countEl) {
-        if (tabName === 'skills') {
-          countEl.textContent = filteredSkillCosts.length;
-        } else if (tabName === 'agents') {
-          countEl.textContent = filteredSubagentCosts.invocation_count > 0 ? 1 : 0;
-        } else if (tabName === 'requests') {
-          countEl.textContent = filteredApiRequests.length;
-        }
-      }
-    });
-
-    // Update tab panel contents if visible
-    const skillsPanel = document.getElementById('skills-panel');
-    if (skillsPanel && skillsPanel.classList.contains('active')) {
-      renderSkillsTab(skillsPanel, filteredSkillCosts);
-    }
-
-    const agentsPanel = document.getElementById('agents-panel');
-    if (agentsPanel && agentsPanel.classList.contains('active')) {
-      renderAgentsTab(agentsPanel, filteredSubagentCosts);
-    }
-  }
-
-  // Render initial display
-  renderFilteredDisplay();
-
-  // Render models section (not filtered by skill/tool as it's session-level)
+  // Render models section
   const modelsEl = document.getElementById('models-section');
   if (modelsEl) {
     await renderModelsSection(modelsEl, models);
   }
-
-  // Attach filter change listeners
-  skillSelect?.addEventListener('change', renderFilteredDisplay);
-  toolSelect?.addEventListener('change', renderFilteredDisplay);
 
   // Initialize tab panels and render Skills tab by default
   const tabPanelsEl = document.getElementById('tab-panels');
@@ -185,12 +124,23 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
     if (skillsPanel) {
       await renderSkillsTab(skillsPanel, skillCosts);
     }
+
+    // Render Agents tab if it exists
+    const agentsPanel = document.getElementById('agents-panel');
+    if (agentsPanel && subagentSessions.length > 0 && !subagentId) {
+      renderSubagentsList(agentsPanel, subagentSessions);
+    }
   }
 
-  // Attach event listeners for session change and tab switching
+  // Attach event listeners for session/subagent change
   document.getElementById('session-select')?.addEventListener('change', (e) => {
     const newSessionId = e.target.value;
-    renderCostAnalysis(el, newSessionId, allSessions);
+    renderCostAnalysis(el, newSessionId, null, allSessions);
+  });
+
+  document.getElementById('subagent-select')?.addEventListener('change', (e) => {
+    const newSubagentId = e.target.value || null;
+    renderCostAnalysis(el, sessionId, newSubagentId, allSessions);
   });
 
   document.querySelectorAll('.section-tab').forEach(btn => {
@@ -209,22 +159,11 @@ async function renderCostAnalysis(el, sessionId, allSessions) {
           panel.classList.add('active');
           tabBtn.classList.add('active');
 
-          // Get current filter selections
-          const selectedSkill = skillSelect?.value || '';
-          const selectedTool = toolSelect?.value || '';
-
-          // Filter data based on current selections
-          const filteredSkillCosts = selectedSkill
-            ? skillCosts.filter(s => s.skill_name === selectedSkill)
-            : skillCosts;
-
-          const filteredSubagentCosts = selectedTool === 'agents' ? subagentCosts : { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 };
-
-          // Render content based on selected tab with filtered data
+          // Render content based on selected tab
           if (tabName === 'skills') {
-            renderSkillsTab(panel, filteredSkillCosts);
+            renderSkillsTab(panel, skillCosts);
           } else if (tabName === 'agents') {
-            renderAgentsTab(panel, filteredSubagentCosts);
+            renderSubagentsList(panel, subagentSessions);
           } else if (tabName === 'requests') {
             renderAPIRequestsTab(panel, apiRequests);
           }
@@ -607,6 +546,57 @@ export async function renderSummaryCards(el, skillCosts, subagentCosts, apiReque
   `;
 
   el.innerHTML = cardsHtml;
+}
+
+/**
+ * Render the list of subagent sessions with their costs
+ * @param {HTMLElement} el - Container to render into
+ * @param {Array} subagentSessions - Array of subagent session objects
+ */
+function renderSubagentsList(el, subagentSessions) {
+  if (!subagentSessions || subagentSessions.length === 0) {
+    el.innerHTML = '<p class="empty">No subagent sessions in this session.</p>';
+    return;
+  }
+
+  // Calculate total cost for percentage column
+  const totalCost = subagentSessions.reduce((sum, s) => sum + (s.cost_usd || 0), 0);
+  const fmtPct = (part, total) => total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '—';
+
+  const html = `
+    <table class="subagents-table">
+      <thead>
+        <tr>
+          <th>Subagent</th>
+          <th>Model</th>
+          <th>Cost</th>
+          <th>Cost % of Parent</th>
+          <th>API Requests</th>
+          <th>Input Tokens</th>
+          <th>Output Tokens</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${subagentSessions.map(s => {
+          const shortId = s.id.slice(0, 8);
+          const shortModel = (s.model || 'unknown').split('/').pop() || 'unknown';
+          return `
+            <tr>
+              <td>${escapeHtml(shortId)}</td>
+              <td>${escapeHtml(shortModel)}</td>
+              <td>${fmt$(s.cost_usd || 0)}</td>
+              <td>${fmtPct(s.cost_usd || 0, totalCost)}</td>
+              <td>${s.api_request_count || 0}</td>
+              <td>${fmtTokens(s.input_tokens || 0)}</td>
+              <td>${fmtTokens(s.output_tokens || 0)}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+
+  el.innerHTML = html;
 }
 
 /**

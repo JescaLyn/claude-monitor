@@ -10,6 +10,7 @@ import { startJsonlWatcher } from './jsonl/watcher.js';
 const OTLP_PORT = parseInt(process.env.OTLP_PORT ?? '4318', 10);
 const API_PORT  = parseInt(process.env.API_PORT  ?? '3001', 10);
 const DB_PATH   = process.env.DB_PATH ?? './data/monitor.db';
+const ENABLE_WATCHER = process.env.DISABLE_WATCHER !== 'true';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD_DIR = join(__dirname, '..', '..', 'dashboard');
@@ -18,7 +19,11 @@ mkdirSync('./data', { recursive: true });
 const db = openDb(DB_PATH);
 
 // Start JSONL file watcher for all Claude Code surfaces (IDE, web, desktop, CLI)
-startJsonlWatcher(db);
+if (ENABLE_WATCHER) {
+  startJsonlWatcher(db);
+} else {
+  console.log('[hub] JSONL watcher disabled');
+}
 
 // OTLP receiver — accepts Claude Code telemetry (direct or forwarded from satellite)
 const receiver = createReceiver(db);

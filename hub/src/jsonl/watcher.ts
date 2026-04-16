@@ -116,7 +116,7 @@ function processFile(db: Database.Database, filePath: string, machineId: string)
 
     if (entries.length > 0) {
       console.log(`[jsonl-watcher] Parsed ${entries.length} entries from ${filePath}`);
-      ingestJsonlEntries(db, entries, machineId);
+      ingestJsonlEntries(db, entries, machineId, filePath);
     }
 
     // Update parse state

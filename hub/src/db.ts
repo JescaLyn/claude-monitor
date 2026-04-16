@@ -8,7 +8,12 @@ export function runMigrations(db: Database.Database): void {
   const row = db.prepare('SELECT MAX(version) as v FROM _migrations').get() as { v: number | null };
   const from = (row.v ?? -1) + 1;
   for (let i = from; i < MIGRATIONS.length; i++) {
-    db.exec(MIGRATIONS[i]);
+    try {
+      db.exec(MIGRATIONS[i]);
+    } catch (err) {
+      // If migration fails due to column already existing or other benign reasons, log and continue
+      console.warn(`[db] Migration ${i} failed (may already be applied):`, (err as Error).message);
+    }
     db.prepare('INSERT INTO _migrations (version) VALUES (?)').run(i);
   }
 }

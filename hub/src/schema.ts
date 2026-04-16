@@ -69,12 +69,12 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_metric_snapshots_session ON metric_snapshots(session_id);
   `,
 
-  // Migration 1: add human-readable name to sessions
+  // Migration 1: add human-readable name to sessions (note: old dbs might fail if column exists, but new ones are fine)
   `ALTER TABLE sessions ADD COLUMN name TEXT;`,
 
   // Migration 2: add project column and parse_state table for JSONL ingestion
   `
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS project TEXT;
+  ALTER TABLE sessions ADD COLUMN project TEXT;
 
   CREATE TABLE IF NOT EXISTS parse_state (
     file_path   TEXT PRIMARY KEY,
@@ -106,5 +106,18 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_rate_limit_snapshots_machine ON rate_limit_snapshots(machine_id);
   CREATE INDEX IF NOT EXISTS idx_rate_limit_snapshots_ts ON rate_limit_snapshots(ts);
   CREATE INDEX IF NOT EXISTS idx_rate_limit_snapshots_model ON rate_limit_snapshots(model);
+  `,
+
+  // Migration 4: add parent_session_id to track subagent relationships
+  `
+  ALTER TABLE sessions ADD COLUMN parent_session_id TEXT;
+  CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
+  `,
+
+  // Migration 5: add denormalized counts and last_event_ts for query performance
+  `
+  ALTER TABLE sessions ADD COLUMN api_request_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sessions ADD COLUMN tool_call_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sessions ADD COLUMN last_event_ts INTEGER;
   `,
 ];

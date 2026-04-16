@@ -31,6 +31,7 @@ export interface SessionRow {
   cache_creation_tokens: number;
   api_request_count: number;
   tool_call_count: number;
+  parent_session_id: string | null;
 }
 
 export interface ToolStat {
@@ -69,14 +70,15 @@ export interface CostByMachine {
 export function getOverview(db: Database.Database): OverviewStats {
   return db.prepare(`
     SELECT
-      COALESCE(SUM(cost_usd), 0)             AS total_cost_usd,
+      (SELECT COALESCE(SUM(cost_usd), 0) FROM sessions) AS total_cost_usd,
       COUNT(*)                                AS total_sessions,
-      COALESCE(SUM(input_tokens), 0)          AS total_input_tokens,
-      COALESCE(SUM(output_tokens), 0)         AS total_output_tokens,
-      COALESCE(SUM(cache_read_tokens), 0)     AS total_cache_read_tokens,
-      COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
+      (SELECT COALESCE(SUM(input_tokens), 0) FROM sessions)          AS total_input_tokens,
+      (SELECT COALESCE(SUM(output_tokens), 0) FROM sessions)         AS total_output_tokens,
+      (SELECT COALESCE(SUM(cache_read_tokens), 0) FROM sessions)     AS total_cache_read_tokens,
+      (SELECT COALESCE(SUM(cache_creation_tokens), 0) FROM sessions) AS total_cache_creation_tokens,
       (SELECT COUNT(*) FROM api_requests)     AS total_api_requests
     FROM sessions
+    WHERE parent_session_id IS NULL
   `).get() as OverviewStats;
 }
 
@@ -104,37 +106,33 @@ export function getSessions(
   if (!VALID_SORT_FIELDS.has(sort)) throw new Error(`Invalid sort field: ${sort}`);
   if (!VALID_ORDERS.has(order)) throw new Error(`Invalid order: ${order}`);
   const sortExpr = SORT_EXPR[sort];
+
+  // Read pre-computed denormalized counts from the sessions table for fast query
   return db.prepare(`
     SELECT
-      s.id, s.machine_id, s.name, s.model, s.started_at, s.ended_at,
-      s.cost_usd, s.input_tokens, s.output_tokens,
-      s.cache_read_tokens, s.cache_creation_tokens,
-      COUNT(DISTINCT ar.id) AS api_request_count,
-      COUNT(DISTINCT te.id) AS tool_call_count,
-      MAX(COALESCE(ar.ts, te.ts)) AS last_event_ts
-    FROM sessions s
-    LEFT JOIN api_requests ar ON ar.session_id = s.id
-    LEFT JOIN tool_events   te ON te.session_id = s.id
-    GROUP BY s.id
+      id, machine_id, name, model, started_at, ended_at,
+      cost_usd, input_tokens, output_tokens,
+      cache_read_tokens, cache_creation_tokens,
+      parent_session_id,
+      api_request_count, tool_call_count, last_event_ts
+    FROM sessions
+    WHERE parent_session_id IS NULL
     ORDER BY ${sortExpr} ${order}
     LIMIT ? OFFSET ?
   `).all(limit, offset) as SessionRow[];
 }
 
 export function getSession(db: Database.Database, id: string): SessionRow | null {
+  // Read pre-computed denormalized counts from the sessions table
   return db.prepare(`
     SELECT
-      s.id, s.machine_id, s.name, s.model, s.started_at, s.ended_at,
-      s.cost_usd, s.input_tokens, s.output_tokens,
-      s.cache_read_tokens, s.cache_creation_tokens,
-      COUNT(DISTINCT ar.id) AS api_request_count,
-      COUNT(DISTINCT te.id) AS tool_call_count,
-      MAX(COALESCE(ar.ts, te.ts)) AS last_event_ts
-    FROM sessions s
-    LEFT JOIN api_requests ar ON ar.session_id = s.id
-    LEFT JOIN tool_events   te ON te.session_id = s.id
-    WHERE s.id = ?
-    GROUP BY s.id
+      id, machine_id, name, model, started_at, ended_at,
+      cost_usd, input_tokens, output_tokens,
+      cache_read_tokens, cache_creation_tokens,
+      parent_session_id,
+      api_request_count, tool_call_count, last_event_ts
+    FROM sessions
+    WHERE id = ?
   `).get(id) as SessionRow | null;
 }
 
@@ -507,5 +505,47 @@ export function getTotalPollingCost(db: Database.Database, daysBack = 30): numbe
     FROM rate_limit_snapshots
     WHERE ts >= strftime('%s', 'now', '-' || ? || ' days') * 1000000
   `).get(daysBack) as { total: number } | undefined;
+  return result?.total ?? 0;
+}
+
+export interface SubagentSession {
+  id: string;
+  model: string | null;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  api_request_count: number;
+}
+
+/**
+ * Get all subagent sessions spawned by a parent session.
+ */
+export function getSubagentSessions(
+  db: Database.Database,
+  parentSessionId: string
+): SubagentSession[] {
+  return db.prepare(`
+    SELECT
+      s.id, s.model, s.cost_usd,
+      s.input_tokens, s.output_tokens,
+      COUNT(DISTINCT ar.id) AS api_request_count
+    FROM sessions s
+    LEFT JOIN api_requests ar ON ar.session_id = s.id
+    WHERE s.parent_session_id = ?
+    GROUP BY s.id
+    ORDER BY s.cost_usd DESC
+  `).all(parentSessionId) as SubagentSession[];
+}
+
+/**
+ * Get cost breakdown of subagents for a parent session.
+ * Returns total cost of all subagents.
+ */
+export function getSubagentTotalCost(db: Database.Database, parentSessionId: string): number {
+  const result = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) as total
+    FROM sessions
+    WHERE parent_session_id = ?
+  `).get(parentSessionId) as { total: number } | undefined;
   return result?.total ?? 0;
 }

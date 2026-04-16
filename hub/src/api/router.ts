@@ -7,6 +7,7 @@ import {
   getSkillCostsWithRequests, getSubagentCostsWithRequests,
   getApiRequests, getSessionBreakdown, getModelBreakdownForSession,
   insertRateLimitSnapshots, getLatestRateLimits, getRateLimitsByMachine, getTotalPollingCost,
+  getSubagentSessions,
 } from './queries.js';
 import { resolveSessionName } from '../session-names.js';
 import type { SessionRow, RateLimitSnapshot } from './queries.js';
@@ -178,6 +179,12 @@ export function createApiRouter(db: Database.Database): Router {
     const days = Math.min(isNaN(rawDays) ? 30 : rawDays, 365);
     const totalCost = getTotalPollingCost(db, days);
     res.json({ total_polling_cost_usd: totalCost, days });
+  });
+
+  // Subagent session endpoints
+  router.get('/sessions/:id/subagents', (req, res) => {
+    const subagents = getSubagentSessions(db, req.params.id);
+    res.json(subagents);
   });
 
   return router;
