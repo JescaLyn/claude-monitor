@@ -389,11 +389,78 @@ thead .stacked-header {
   white-space: nowrap;
 }
 
+.sessions-table .tokens-header {
+  text-align: center;
+  position: relative;
+  min-width: 100px;
+  padding-left: 14px;
+  padding-right: 14px;
+  vertical-align: top;
+}
+
+.tokens-header-title {
+  text-align: center;
+}
+
+.inline-tokens-header {
+  width: 100%;
+  border-collapse: collapse;
+  background: none;
+  box-shadow: none;
+  margin: 2px 0 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.inline-tokens-header td {
+  padding: 1px 4px;
+  border: none;
+  background: none;
+  text-align: center;
+  min-width: 40px;
+  white-space: nowrap;
+}
+
+.tokens-cell {
+  padding: 6px 14px !important;
+}
+
+.token-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.token-row .token-in,
+.token-row .token-out {
+  min-width: 40px;
+  text-align: center;
+}
+
 thead th.th-center {
   text-align: center;
 }
 
 thead th.th-center button.sort-btn {
+  text-align: center;
+}
+
+thead th.th-right {
+  text-align: right;
+}
+
+thead th.th-right button.sort-btn {
+  text-align: right;
+}
+
+tbody td.td-right {
+  text-align: right;
+}
+
+tbody td.td-center {
   text-align: center;
 }
 

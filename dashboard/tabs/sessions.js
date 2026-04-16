@@ -56,9 +56,10 @@ function sortHeader(label, field, sort, order, thClass = '') {
   return `<th${cls}><button class="sort-btn" data-field="${field}" data-order="${nextOrder}">${label}${indicator}</button></th>`;
 }
 
-function dateCell(microseconds) {
+function dateCell(microseconds, tdClass = '') {
   const { date, time } = fmtDateParts(microseconds);
-  return `<td class="date-cell"><div class="date-main">${date}</div><div class="date-sub">${time}</div></td>`;
+  const cls = tdClass ? ` ${tdClass}` : '';
+  return `<td class="date-cell${cls}"><div class="date-main">${date}</div><div class="date-sub">${time}</div></td>`;
 }
 
 function buildTable(rows, offset, sort, order, totalCount = rows.length) {
@@ -71,11 +72,11 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
       <thead>
         <tr>
           <th>Name</th>
-          ${sortHeader('Machine', 'machine_id', sort, order)}
-          ${sortHeader('Started', 'started_at', sort, order)}
+          ${sortHeader('Machine', 'machine_id', sort, order, 'th-center')}
+          ${sortHeader('Started', 'started_at', sort, order, 'th-center')}
           ${sortHeader('Last Activity', 'last_event_ts', sort, order)}
           ${sortHeader('Cost', 'cost_usd', sort, order, 'th-center')}
-          <th class="stacked-header"><div>Tokens</div><div class="stacked-sub">In / Out</div></th>
+          <th class="tokens-header"><div class="tokens-header-title">Tokens</div><table class="inline-tokens-header"><tbody><tr><td class="token-in">IN</td><td class="token-out">OUT</td></tr></tbody></table></th>
           <th class="models-header"><div class="models-header-title">Models</div><table class="inline-models-header"><tbody><tr><td class="model-name">Model</td><td class="model-requests">Req %</td><td class="model-cost">Cost %</td></tr></tbody></table></th>
           ${sortHeader('API Reqs', 'api_request_count', sort, order)}
           ${sortHeader('Tools', 'tool_call_count', sort, order, 'th-center')}
@@ -87,11 +88,11 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
           return `
             <tr class="session-row" data-id="${escapeHtml(r.id)}">
               ${nameCell(r)}
-              <td>${machineDisplay}</td>
-              ${dateCell(r.started_at)}
+              <td class="td-center">${machineDisplay}</td>
+              ${dateCell(r.started_at, 'td-center')}
               ${dateCell(r.last_event_ts)}
-              <td>${fmt$(r.cost_usd)}</td>
-              <td>${fmtTokens(r.input_tokens)} / ${fmtTokens(r.output_tokens)}</td>
+              <td class="td-center">${fmt$(r.cost_usd)}</td>
+              <td class="tokens-cell"><div class="token-row"><span class="token-in">${fmtTokens(r.input_tokens)}</span><span class="token-out">${fmtTokens(r.output_tokens)}</span></div></td>
               <td class="models-cell"><span class="models-list">Loading...</span></td>
               <td>${r.api_request_count}</td>
               <td>${r.tool_call_count}</td>
