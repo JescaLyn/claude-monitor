@@ -21,11 +21,11 @@ export async function get(path) {
 }
 
 /**
- * Format a dollar amount to 4 decimal places.
+ * Format a dollar amount to 2 decimal places.
  * @param {number|null|undefined} n
  */
 export function fmt$(n) {
-  return `$${(n ?? 0).toFixed(4)}`;
+  return `$${(n ?? 0).toFixed(2)}`;
 }
 
 /**
@@ -40,21 +40,27 @@ export function fmtTokens(n) {
 }
 
 /**
- * Format a microsecond timestamp as a human-readable local date/time.
- * @param {number|null|undefined} microseconds
+ * Format a timestamp as a human-readable local date/time.
+ * Handles both milliseconds (started_at) and microseconds (ts).
+ * @param {number|null|undefined} timestamp
  */
-export function fmtDate(microseconds) {
-  if (!microseconds) return '—';
-  return new Date(microseconds / 1000).toLocaleString();
+export function fmtDate(timestamp) {
+  if (!timestamp) return '—';
+  // If value > 1e13, likely microseconds; if < 1e13, likely milliseconds
+  const ms = timestamp > 1e13 ? timestamp / 1000 : timestamp;
+  return new Date(ms).toLocaleString();
 }
 
 /**
- * Format a microsecond timestamp as a human-readable local date/time without seconds.
- * @param {number|null|undefined} microseconds
+ * Format a timestamp as a human-readable local date/time without seconds.
+ * Handles both milliseconds (started_at) and microseconds (ts).
+ * @param {number|null|undefined} timestamp
  */
-export function fmtDateNoSeconds(microseconds) {
-  if (!microseconds) return '—';
-  const date = new Date(microseconds / 1000);
+export function fmtDateNoSeconds(timestamp) {
+  if (!timestamp) return '—';
+  // If value > 1e13, likely microseconds; if < 1e13, likely milliseconds
+  const ms = timestamp > 1e13 ? timestamp / 1000 : timestamp;
+  const date = new Date(ms);
   return date.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -66,15 +72,17 @@ export function fmtDateNoSeconds(microseconds) {
 }
 
 /**
- * Split a microsecond timestamp into a short date and a short time,
+ * Split a timestamp into a short date and a short time,
  * for rendering stacked inside narrow table cells. Year is omitted
- * when it matches the current year.
- * @param {number|null|undefined} microseconds
+ * when it matches the current year. Handles both milliseconds and microseconds.
+ * @param {number|null|undefined} timestamp
  * @returns {{date: string, time: string}}
  */
-export function fmtDateParts(microseconds) {
-  if (!microseconds) return { date: '—', time: '' };
-  const d = new Date(microseconds / 1000);
+export function fmtDateParts(timestamp) {
+  if (!timestamp) return { date: '—', time: '' };
+  // If value > 1e13, likely microseconds; if < 1e13, likely milliseconds
+  const ms = timestamp > 1e13 ? timestamp / 1000 : timestamp;
+  const d = new Date(ms);
   const sameYear = d.getFullYear() === new Date().getFullYear();
   const month = d.toLocaleDateString('en-US', { month: 'short' });
   const day = String(d.getDate()).padStart(2, '0');

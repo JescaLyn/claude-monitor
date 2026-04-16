@@ -3,6 +3,19 @@ import { get, fmt$, fmtTokens, fmtDate, fmtDateNoSeconds, fmtDateParts, fmtDurat
 const LIMIT = 20;
 const DEFAULT_HOURS = 24;  // Default: show sessions active in the last 24 hours
 
+function simplifyMachineId(machineId) {
+  if (!machineId) return '—';
+  // Special case: 'local' sentinel (old sessions before hostname resolution)
+  if (machineId === 'local') return 'MacBook'; // Normalize to match the actual machine
+  // Remove domain suffix (e.g., "Jessicas-MacBook-Pro.local" → "Jessicas-MacBook-Pro")
+  const hostname = machineId.split('.')[0];
+  // Extract the device type (e.g., "Jessicas-MacBook-Pro" → "MacBook")
+  const match = hostname.match(/MacBook|iMac|Mac-|Windows|Zima|Linux/i);
+  if (match) return match[0];
+  // Fallback for unknown machines
+  return escapeHtml(hostname.charAt(0).toUpperCase() + hostname.slice(1));
+}
+
 function getTimeThreshold(hours) {
   if (!hours || hours === 0) return 0;  // 0 means "all time"
   const now = Date.now() * 1000;  // microseconds
@@ -70,7 +83,7 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
       </thead>
       <tbody>
         ${rows.map(r => {
-          const machineDisplay = r.machine_id === 'local' ? 'This Machine' : escapeHtml(r.machine_id);
+          const machineDisplay = simplifyMachineId(r.machine_id);
           return `
             <tr class="session-row" data-id="${escapeHtml(r.id)}">
               ${nameCell(r)}
