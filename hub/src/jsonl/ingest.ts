@@ -114,7 +114,7 @@ export function ingestJsonlEntries(
       // tool_call_count(sid), last_event_ts(sid, filterid, sid), where(id)
       refreshSession.run(
         sid, filterId, sid, filterId, sid, filterId, sid, filterId, sid, filterId,
-        sid, filterId, sid, filterId, sid, sid
+        sid, filterId, sid, sid, filterId, sid, sid
       );
     }
   });

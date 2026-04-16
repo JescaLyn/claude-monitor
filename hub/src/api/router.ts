@@ -117,7 +117,37 @@ export function createApiRouter(db: Database.Database): Router {
   });
 
   router.get('/sessions/:id/breakdown', (req, res) => {
-    const breakdown = getSessionBreakdown(db, req.params.id);
+    const sessionId = req.params.id;
+    const session = getSession(db, sessionId);
+
+    // If this is a subagent session, query the parent with agent_id filtering
+    if (session?.parent_session_id) {
+      const parentId = session.parent_session_id;
+      const apiRequests = db.prepare(`
+        SELECT ar.id, ar.ts, ar.session_id, ar.model, ar.input_tokens,
+               ar.cache_read_tokens, ar.cache_creation_tokens, ar.output_tokens, ar.cost_usd, ar.duration_ms, ar.is_fast_mode
+        FROM api_requests ar
+        WHERE ar.session_id = ? AND ar.agent_id = ?
+        ORDER BY ar.ts DESC
+      `).all(parentId, sessionId) as any[];
+
+      if (apiRequests.length === 0) {
+        res.status(404).json({ error: 'session not found' });
+        return;
+      }
+
+      const totalContextTokens = apiRequests.reduce((sum, r) => sum + (r.input_tokens || 0), 0);
+      res.json({
+        skill_costs: [],
+        subagent_costs: { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 },
+        api_requests: apiRequests,
+        total_context_tokens: totalContextTokens,
+        context_token_ratio: 0,
+      });
+      return;
+    }
+
+    const breakdown = getSessionBreakdown(db, sessionId);
     if (!breakdown.api_requests || breakdown.api_requests.length === 0) {
       res.status(404).json({ error: 'session not found' });
       return;
@@ -126,7 +156,30 @@ export function createApiRouter(db: Database.Database): Router {
   });
 
   router.get('/sessions/:id/models', (req, res) => {
-    const models = getModelBreakdownForSession(db, req.params.id);
+    const sessionId = req.params.id;
+    const session = getSession(db, sessionId);
+
+    // If this is a subagent session, query the parent with agent_id filtering
+    if (session?.parent_session_id) {
+      const models = db.prepare(`
+        SELECT
+          model,
+          COUNT(*) AS api_request_count,
+          COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+          COALESCE(SUM(output_tokens), 0) AS output_tokens,
+          COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+          COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
+        FROM api_requests
+        WHERE session_id = ? AND agent_id = ? AND model != '<synthetic>'
+        GROUP BY model
+        ORDER BY total_cost_usd DESC
+      `).all(session.parent_session_id, sessionId) as any;
+      res.json(models);
+      return;
+    }
+
+    const models = getModelBreakdownForSession(db, sessionId);
     res.json(models);
   });
 
