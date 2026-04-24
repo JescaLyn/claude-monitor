@@ -65,7 +65,7 @@ async function testCardSubtext() {
   const subtexts = Array.from(container.querySelectorAll('.card-subtext')).map(el => el.textContent);
   const expectedSubtexts = [
     '0 API requests',
-    '0 invocations',
+    '1 invocations',
     '0 invocations',
     'Other tool invocations',
     'Overhead from skills',
