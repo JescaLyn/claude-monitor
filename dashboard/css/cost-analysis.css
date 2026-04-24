@@ -364,14 +364,16 @@ th:last-child {
 /* Detail rows for expandable content */
 .skill-detail,
 .agent-detail,
-.request-detail {
-  display: none;
-  background: var(--bg-detail);
+.request-row {
+  transition: background-color 0.2s ease;
+}
+
+.request-row:hover {
+  background-color: var(--bg-hover, rgba(100, 150, 255, 0.05));
 }
 
 .skill-detail.expanded,
-.agent-detail.expanded,
-.request-detail.expanded {
+.agent-detail.expanded {
   display: table-row;
 }
 
@@ -380,23 +382,6 @@ th:last-child {
   border-top: 1px solid var(--border-color);
 }
 
-.detail-panel {
-  padding: 16px;
-  background: var(--bg-detail);
-  border-left: 3px solid var(--accent-blue);
-  border-radius: 4px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-primary);
-}
-
-.detail-panel > div {
-  margin-bottom: 8px;
-}
-
-.detail-panel > div:last-child {
-  margin-bottom: 0;
-}
 
 .detail-panel strong {
   color: var(--text-primary);

@@ -4,6 +4,7 @@ import type {
   SubagentCostBreakdown,
   ApiRequestDetail,
   SessionToolBreakdown,
+  SkillInvocation,
 } from '../types.js';
 
 export interface OverviewStats {
@@ -218,6 +219,27 @@ export function getSubagentCostsWithRequests(db: Database.Database): SubagentCos
   `).get() as SubagentCostBreakdown | undefined;
 
   return result || { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 };
+}
+
+export function getSkillInvocations(db: Database.Database, skillName: string, sessionId: string): SkillInvocation[] {
+  return db.prepare(`
+    SELECT
+      te.skill_name,
+      te.id AS tool_event_id,
+      te.ts,
+      COALESCE(SUM(ar.cost_usd), 0) AS cost_usd,
+      COUNT(DISTINCT ar.id) AS api_request_count,
+      te.duration_ms,
+      te.success
+    FROM tool_events te
+    LEFT JOIN api_requests ar ON (
+      ar.session_id = te.session_id
+      AND ar.prompt_id = te.prompt_id
+    )
+    WHERE te.tool_name = 'Skill' AND te.skill_name = ? AND te.session_id = ?
+    GROUP BY te.id
+    ORDER BY te.ts DESC
+  `).all(skillName, sessionId) as SkillInvocation[];
 }
 
 export interface ApiRequestFilters {

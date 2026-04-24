@@ -61,6 +61,7 @@ async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
         <button class="section-tab active" data-tab="skills">Skills <span class="tab-count">0</span></button>
         ${subagentSessions.length > 0 && !subagentId ? `<button class="section-tab" data-tab="agents">Agents <span class="tab-count">0</span></button>` : ''}
         <button class="section-tab" data-tab="requests">API Requests <span class="tab-count">0</span></button>
+        <button class="section-tab" data-tab="tools">Tools <span class="tab-count">0</span></button>
       </div>
 
       <div class="tab-panels" id="tab-panels"></div>
@@ -74,16 +75,19 @@ async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
   let subagentCosts = {};
   let apiRequests = [];
   let models = [];
+  let toolEvents = [];
 
   try {
-    const [breakdown, modelsData] = await Promise.all([
+    const [breakdown, modelsData, toolData] = await Promise.all([
       subagentId ? get(`/sessions/${subagentId}/breakdown`) : get(`/sessions/${sessionId}/breakdown`),
-      subagentId ? get(`/sessions/${subagentId}/models`) : get(`/sessions/${sessionId}/models`)
+      subagentId ? get(`/sessions/${subagentId}/models`) : get(`/sessions/${sessionId}/models`),
+      subagentId ? get(`/sessions/${subagentId}/tools`).catch(() => []) : get(`/sessions/${sessionId}/tools`).catch(() => [])
     ]);
     skillCosts = breakdown.skill_costs || [];
     subagentCosts = breakdown.subagent_costs || {};
     apiRequests = breakdown.api_requests || [];
     models = modelsData || [];
+    toolEvents = toolData || [];
   } catch (err) {
     console.error('Error fetching cost analysis data:', err);
     el.innerHTML = `<p class="error">Error loading cost analysis: ${err.message}</p>`;
@@ -96,6 +100,19 @@ async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
   el.dataset.subagentSessions = JSON.stringify(subagentSessions);
 
   // No filter dropdowns - render all data
+
+  // Update tab badge counts
+  const skillsBadge = document.querySelector('[data-tab="skills"] .tab-count');
+  if (skillsBadge) skillsBadge.textContent = skillCosts.length;
+
+  const agentsBadge = document.querySelector('[data-tab="agents"] .tab-count');
+  if (agentsBadge) agentsBadge.textContent = subagentSessions.length;
+
+  const requestsBadge = document.querySelector('[data-tab="requests"] .tab-count');
+  if (requestsBadge) requestsBadge.textContent = apiRequests.length;
+
+  const toolsBadge = document.querySelector('[data-tab="tools"] .tab-count');
+  if (toolsBadge) toolsBadge.textContent = toolEvents.length;
 
   // Render summary cards with all data
   const summaryCardsEl = document.getElementById('summary-cards');
@@ -117,12 +134,13 @@ async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
       <div id="skills-panel" class="tab-panel active"></div>
       <div id="agents-panel" class="tab-panel"></div>
       <div id="requests-panel" class="tab-panel"></div>
+      <div id="tools-panel" class="tab-panel"></div>
     `;
 
     // Render Skills tab by default
     const skillsPanel = document.getElementById('skills-panel');
     if (skillsPanel) {
-      await renderSkillsTab(skillsPanel, skillCosts);
+      await renderSkillsTab(skillsPanel, skillCosts, sessionId);
     }
 
     // Render Agents tab if it exists
@@ -161,11 +179,13 @@ async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
 
           // Render content based on selected tab
           if (tabName === 'skills') {
-            renderSkillsTab(panel, skillCosts);
+            renderSkillsTab(panel, skillCosts, sessionId);
           } else if (tabName === 'agents') {
             renderSubagentsList(panel, subagentSessions);
           } else if (tabName === 'requests') {
             renderAPIRequestsTab(panel, apiRequests);
+          } else if (tabName === 'tools') {
+            renderToolsTab(panel, toolEvents);
           }
         }
       }
@@ -200,8 +220,6 @@ async function renderModelsSection(el, models) {
             <th>Requests % of Session</th>
             <th>Input Tokens</th>
             <th>Output Tokens</th>
-            <th>Cache Read</th>
-            <th>Cache Create</th>
             <th>Cost</th>
             <th>Cost % of Session</th>
           </tr>
@@ -216,8 +234,6 @@ async function renderModelsSection(el, models) {
                 <td>${fmtPct(m.api_request_count || 0, sessionTotalRequests)}</td>
                 <td>${fmtTokens(m.input_tokens)}</td>
                 <td>${fmtTokens(m.output_tokens)}</td>
-                <td>${fmtTokens(m.cache_read_tokens)}</td>
-                <td>${fmtTokens(m.cache_creation_tokens)}</td>
                 <td>${fmt$(m.total_cost_usd)}</td>
                 <td>${fmtPct(m.total_cost_usd || 0, sessionTotalCost)}</td>
               </tr>
@@ -235,8 +251,9 @@ async function renderModelsSection(el, models) {
  * Render the Skills sub-tab with a table of skills and expandable detail rows
  * @param {HTMLElement} el - Container to render into
  * @param {Array} skillCosts - Array of skill cost objects
+ * @param {string} sessionId - Session ID for fetching invocation details
  */
-export async function renderSkillsTab(el, skillCosts) {
+export async function renderSkillsTab(el, skillCosts, sessionId) {
   const costs = skillCosts.map(s => s.total_cost_usd || 0);
   const maxCost = costs.length > 0 ? Math.max(...costs) : 0;
   const html = `
@@ -265,8 +282,13 @@ export async function renderSkillsTab(el, skillCosts) {
           <tr class="skill-detail" style="display: none;">
             <td colspan="4">
               <div class="detail-panel">
-                <div>API Requests: ${skill.api_request_count}</div>
-                <div>Cost per Call: ${fmt$(skill.invocation_count > 0 ? skill.total_cost_usd / skill.invocation_count : 0)}</div>
+                <div class="invocation-summary">
+                  <div>API Requests: ${skill.api_request_count}</div>
+                  <div>Cost per Call: ${fmt$(skill.invocation_count > 0 ? skill.total_cost_usd / skill.invocation_count : 0)}</div>
+                </div>
+                <div class="invocation-list-container">
+                  <div class="invocation-list-placeholder">Loading invocations...</div>
+                </div>
               </div>
             </td>
           </tr>
@@ -280,13 +302,86 @@ export async function renderSkillsTab(el, skillCosts) {
 
   // Add click handlers for expand/collapse
   el.querySelectorAll('.skill-row').forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', async () => {
       const detailRow = row.nextElementSibling;
       if (detailRow && detailRow.classList.contains('skill-detail')) {
-        detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+        const isHidden = detailRow.style.display === 'none';
+
+        if (isHidden) {
+          // Expanding - fetch invocation details if not already loaded
+          const skillName = row.dataset.skill;
+          const listContainer = detailRow.querySelector('.invocation-list-container');
+          const placeholder = listContainer?.querySelector('.invocation-list-placeholder');
+
+          if (placeholder) {
+            try {
+              const invocations = await get(`/sessions/${sessionId}/skills/${encodeURIComponent(skillName)}/invocations`);
+              renderSkillInvocationsList(listContainer, invocations, skillName);
+            } catch (err) {
+              console.error(`Error fetching invocations for ${skillName}:`, err);
+              listContainer.innerHTML = `<p class="error">Error loading invocations: ${err.message}</p>`;
+            }
+          }
+        }
+
+        detailRow.style.display = isHidden ? '' : 'none';
       }
     });
   });
+}
+
+/**
+ * Render the list of individual skill invocations
+ * @param {HTMLElement} container - Container to render into
+ * @param {Array} invocations - Array of SkillInvocation objects
+ * @param {string} skillName - Name of the skill
+ */
+function renderSkillInvocationsList(container, invocations, skillName) {
+  if (!invocations || invocations.length === 0) {
+    container.innerHTML = '<p class="empty">No invocations found for this skill.</p>';
+    return;
+  }
+
+  const costs = invocations.map(i => i.cost_usd || 0);
+  const maxCost = costs.length > 0 ? Math.max(...costs) : 0;
+
+  const html = `
+    <div class="invocation-list">
+      <h4>Individual Invocations</h4>
+      <table class="invocation-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Cost</th>
+            <th>API Requests</th>
+            <th>Duration</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${invocations.map(inv => {
+            const costPercentage = maxCost > 0 ? (inv.cost_usd / maxCost) * 100 : 0;
+            const status = inv.success === null ? '—' : inv.success === 1 ? 'Success' : 'Failed';
+            const statusClass = inv.success === 1 ? 'success' : inv.success === 0 ? 'failed' : '';
+            return `
+              <tr class="invocation-row" data-invocation="${escapeHtml(inv.tool_event_id)}">
+                <td>${fmtDate(inv.ts)}</td>
+                <td class="cost-cell">
+                  <div class="cost-bar" style="width: ${costPercentage}%"></div>
+                  <span class="cost-value">${fmt$(inv.cost_usd)}</span>
+                </td>
+                <td>${inv.api_request_count}</td>
+                <td>${fmtDurationMs(inv.duration_ms)}</td>
+                <td><span class="status-badge ${statusClass}">${status}</span></td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = html;
 }
 
 /**
@@ -327,8 +422,18 @@ export async function renderAPIRequestsTab(el, apiRequests) {
         <tr>
           <th class="sortable" data-sort="ts">Timestamp</th>
           <th class="sortable" data-sort="cost_usd">Cost</th>
+          <th class="sortable" data-sort="input_tokens">Input Tokens</th>
           <th class="sortable" data-sort="output_tokens">Output Tokens</th>
+          <th colspan="2" style="text-align: center;">Cache</th>
+          <th class="sortable" data-sort="duration_ms">Duration</th>
+          <th class="sortable" data-sort="is_fast_mode">Fast Mode</th>
           <th class="sortable" data-sort="model">Model</th>
+        </tr>
+        <tr style="border-top: none;">
+          <th colspan="4"></th>
+          <th class="sortable" data-sort="cache_read_tokens">Read</th>
+          <th class="sortable" data-sort="cache_creation_tokens">Creation</th>
+          <th colspan="3"></th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -372,7 +477,7 @@ export async function renderAPIRequestsTab(el, apiRequests) {
       const costPercentage = maxCost > 0 ? (req.cost_usd / maxCost) * 100 : 0;
       const modelName = req.model || 'Unknown';
       const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${escapeHtml(modelName)}</span>`;
-      const totalInputTokens = (req.input_tokens || 0) + (req.cache_read_tokens || 0);
+      const fastModeIndicator = req.is_fast_mode ? '<span style="color: var(--accent-green); font-weight: 600;">Yes</span>' : 'No';
       return `
         <tr class="request-row" data-timestamp="${req.ts}">
           <td>${fmtDate(req.ts)}</td>
@@ -380,41 +485,21 @@ export async function renderAPIRequestsTab(el, apiRequests) {
             <div class="cost-bar" style="width: ${costPercentage}%"></div>
             <span class="cost-value">${fmt$(req.cost_usd)}</span>
           </td>
+          <td>${fmtTokens(req.input_tokens)}</td>
           <td>${fmtTokens(req.output_tokens)}</td>
+          <td>${fmtTokens(req.cache_read_tokens)}</td>
+          <td>${fmtTokens(req.cache_creation_tokens)}</td>
+          <td>${fmtDurationMs(req.duration_ms)}</td>
+          <td>${fastModeIndicator}</td>
           <td>${modelBadge}</td>
-        </tr>
-        <tr class="request-detail" style="display: none;">
-          <td colspan="4">
-            <div class="detail-panel">
-              <div>Input Tokens: ${fmtTokens(req.input_tokens)}</div>
-              <div>Cache Read: ${fmtTokens(req.cache_read_tokens)}</div>
-              <div>Cache Creation: ${fmtTokens(req.cache_creation_tokens)}</div>
-              <div>Duration: ${fmtDurationMs(req.duration_ms)}</div>
-              <div>Fast Mode: ${req.is_fast_mode ? 'Yes' : 'No'}</div>
-            </div>
-          </td>
         </tr>
       `;
     }).join('');
-
-    // Attach row click handlers for expand/collapse
-    attachRowHandlers();
   }
 
   /**
    * Attach expand/collapse handlers to request rows
    */
-  function attachRowHandlers() {
-    tbody.querySelectorAll('.request-row').forEach(row => {
-      row.addEventListener('click', () => {
-        const detail = row.nextElementSibling;
-        if (detail && detail.classList.contains('request-detail')) {
-          detail.style.display = detail.style.display === 'none' ? '' : 'none';
-        }
-      });
-    });
-  }
-
   /**
    * Handle filter input changes
    */
@@ -524,7 +609,7 @@ export async function renderSummaryCards(el, skillCosts, subagentCosts, apiReque
       <div class="card-subtext">${skillCallCount} invocations</div>
     </div>
     <div class="summary-card">
-      <div class="card-label">Agent Cost</div>
+      <div class="card-label">Subagent Cost</div>
       <div class="card-value">${fmt$(agentCostTotal)}</div>
       <div class="card-subtext">${agentCallCount} invocations</div>
     </div>
@@ -597,6 +682,111 @@ function renderSubagentsList(el, subagentSessions) {
   `;
 
   el.innerHTML = html;
+}
+
+/**
+ * Render the Tools sub-tab with a table of tool invocations and their costs
+ * @param {HTMLElement} el - Container to render into
+ * @param {Array} toolEvents - Array of tool event objects
+ */
+export async function renderToolsTab(el, toolEvents) {
+  if (!toolEvents || toolEvents.length === 0) {
+    el.innerHTML = '<p class="empty">No tool invocations in this session.</p>';
+    return;
+  }
+
+  let currentSort = { column: null, ascending: false };
+
+  // Data is already aggregated from backend; just convert to array for sorting
+  let tools = Array.isArray(toolEvents) ? toolEvents : [];
+
+  // Render filter UI and table
+  const filterHtml = `
+    <div class="tools-header">
+      <h3>Tool Invocations</h3>
+    </div>
+    <table class="tools-table">
+      <thead>
+        <tr>
+          <th class="sortable" data-sort="tool_name">Tool Name</th>
+          <th class="sortable" data-sort="invocation_count">Invocation Count</th>
+          <th class="sortable" data-sort="api_request_count">API Requests</th>
+          <th class="sortable" data-sort="total_cost_usd">Total Cost</th>
+          <th class="sortable" data-sort="success_count">Success Rate</th>
+          <th class="sortable" data-sort="avg_duration_ms">Avg Duration</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  `;
+
+  el.innerHTML = filterHtml;
+
+  const table = el.querySelector('.tools-table');
+  const tbody = table.querySelector('tbody');
+
+  /**
+   * Update table body with sorted data
+   */
+  function updateTableBody() {
+    // Apply sort if a column has been selected
+    let sorted = tools;
+    if (currentSort.column !== null) {
+      sorted = [...tools].sort((a, b) => {
+        const aVal = a[currentSort.column];
+        const bVal = b[currentSort.column];
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return currentSort.ascending ? cmp : -cmp;
+      });
+    }
+
+    // Calculate max cost for cost bar visualization
+    const costs = sorted.map(t => t.total_cost_usd || 0);
+    const maxCost = costs.length > 0 ? Math.max(...costs) : 0;
+
+    // Session total cost for percentage calculation
+    const sessionTotalCost = tools.reduce((sum, t) => sum + (t.total_cost_usd || 0), 0);
+    const fmtPct = (part, total) => total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '—';
+
+    tbody.innerHTML = sorted.map(tool => {
+      const costPercentage = maxCost > 0 ? (tool.total_cost_usd / maxCost) * 100 : 0;
+      const successRate = tool.invocation_count > 0 ? ((tool.success_count / tool.invocation_count) * 100).toFixed(1) : 0;
+      const durationStr = tool.avg_duration_ms ? `${tool.avg_duration_ms.toFixed(0)}ms` : '—';
+
+      return `
+        <tr class="tool-row" data-tool="${escapeHtml(tool.tool_name)}">
+          <td>${escapeHtml(tool.tool_name)}</td>
+          <td>${tool.invocation_count}</td>
+          <td>${tool.api_request_count}</td>
+          <td class="cost-cell">
+            <div class="cost-bar" style="width: ${costPercentage}%"></div>
+            <span class="cost-value">${fmt$(tool.total_cost_usd)}</span>
+          </td>
+          <td>${successRate}%</td>
+          <td>${durationStr}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  /**
+   * Handle sort column clicks
+   */
+  el.querySelectorAll('th.sortable').forEach(header => {
+    header.addEventListener('click', () => {
+      const column = header.dataset.sort;
+      if (currentSort.column === column) {
+        currentSort.ascending = !currentSort.ascending;
+      } else {
+        currentSort.column = column;
+        currentSort.ascending = true;
+      }
+      updateTableBody();
+    });
+  });
+
+  // Initial render
+  updateTableBody();
 }
 
 /**

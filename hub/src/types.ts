@@ -152,6 +152,16 @@ export interface ApiRequestDetail {
   prompt_length?: number;
 }
 
+export interface SkillInvocation {
+  skill_name: string;
+  tool_event_id: string;
+  ts: number;
+  cost_usd: number;
+  api_request_count: number;
+  duration_ms: number | null;
+  success: number | null;
+}
+
 export interface SessionToolBreakdown {
   skill_costs: SkillCostBreakdown[];
   subagent_costs: SubagentCostBreakdown;

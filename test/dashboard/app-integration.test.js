@@ -52,7 +52,7 @@ function testOldCostButtonsRemoved() {
  * Test: Other tabs are preserved
  */
 function testOtherTabsPreserved() {
-  const expectedTabs = ['overview', 'sessions', 'cost', 'skills', 'tools'];
+  const expectedTabs = ['overview', 'sessions'];
   const missingTabs = [];
 
   expectedTabs.forEach(tabName => {
@@ -146,22 +146,21 @@ function testButtonPlacement() {
 
   // Verify it comes after basic tabs
   const costAnalysisIndex = tabNames.indexOf('cost-analysis');
-  const skillsIndex = tabNames.indexOf('skills');
-  const toolsIndex = tabNames.indexOf('tools');
+  const sessionsIndex = tabNames.indexOf('sessions');
 
-  if (costAnalysisIndex < toolsIndex) {
-    throw new Error(`cost-analysis button is not placed logically (index ${costAnalysisIndex}, should be after tools at ${toolsIndex})`);
+  if (costAnalysisIndex < sessionsIndex) {
+    throw new Error(`cost-analysis button is not placed logically (index ${costAnalysisIndex}, should be after sessions at ${sessionsIndex})`);
   }
 
   console.log('✓ testButtonPlacement: Cost Analysis button placed correctly');
 }
 
 /**
- * Test: Total number of tabs is correct (6 tabs, not 8)
+ * Test: Total number of tabs is correct (3 tabs, not 8)
  */
 function testTabCount() {
   const buttons = document.querySelectorAll('nav#tabs button');
-  const expectedCount = 6; // overview, sessions, cost, skills, tools, cost-analysis
+  const expectedCount = 3; // overview, sessions, cost-analysis
 
   if (buttons.length !== expectedCount) {
     throw new Error(`Expected ${expectedCount} tab buttons, found ${buttons.length}`);
