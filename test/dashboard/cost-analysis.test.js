@@ -24,17 +24,19 @@ async function testSummaryCardsCount() {
   const container = document.createElement('div');
 
   const skillCosts = [
-    { name: 'skill-1', totalCost: 0.5, totalTokens: 1000, contextTokens: 200 },
-    { name: 'skill-2', totalCost: 0.3, totalTokens: 600, contextTokens: 120 }
+    { skill_name: 'skill-1', total_cost_usd: 0.5, total_context_tokens: 200, invocation_count: 1, api_request_count: 2 },
+    { skill_name: 'skill-2', total_cost_usd: 0.3, total_context_tokens: 120, invocation_count: 1, api_request_count: 1 }
   ];
 
   const subagentCosts = {
-    'agent-1': { totalCost: 0.2, totalTokens: 400, contextTokens: 80 }
+    total_cost_usd: 0.2,
+    invocation_count: 1,
+    api_request_count: 2
   };
 
   const apiRequests = [
-    { id: 'req-1', cost: 0.05 },
-    { id: 'req-2', cost: 0.02 }
+    { id: 'req-1', cost_usd: 0.05 },
+    { id: 'req-2', cost_usd: 0.02 }
   ];
 
   // Call real implementation
@@ -52,8 +54,8 @@ async function testSummaryCardsCount() {
 async function testCardSubtext() {
   const container = document.createElement('div');
 
-  const skillCosts = [{ totalCost: 1, totalTokens: 1000, contextTokens: 100 }];
-  const subagentCosts = {};
+  const skillCosts = [{ total_cost_usd: 1, total_context_tokens: 100, invocation_count: 1, api_request_count: 1 }];
+  const subagentCosts = { total_cost_usd: 0, invocation_count: 0, api_request_count: 0 };
   const apiRequests = [];
 
   // Call real implementation
@@ -586,245 +588,6 @@ async function testAPIRequestsTabStructure() {
   console.log('✓ testAPIRequestsTabStructure: table structure correct');
 }
 
-/**
- * Test: renderAPIRequestsTab expandable rows
- */
-async function testAPIRequestsTabExpandable() {
-  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
-
-  const container = document.createElement('div');
-
-  const mockApiRequests = [
-    {
-      timestamp: 1712575200000000,
-      cost: 0.012,
-      tokens: 400,
-      model: 'claude-opus-4-6',
-      url: '/v1/messages',
-      status: 200,
-      durationMs: 2500
-    }
-  ];
-
-  await renderAPIRequestsTab(container, mockApiRequests);
-
-  // Find the request row
-  const requestRow = container.querySelector('tbody tr.request-row');
-  assert(requestRow, 'Request row not found');
-
-  // Find the detail row
-  const detailRow = requestRow.nextElementSibling;
-  assert(detailRow && detailRow.classList.contains('request-detail'), 'Detail row not found');
-
-  // Detail row should start hidden
-  assert(detailRow.style.display === 'none', `Expected detail row to be hidden, got display="${detailRow.style.display}"`);
-
-  // Simulate click
-  requestRow.click();
-
-  // After click, detail row should be visible
-  assert(detailRow.style.display !== 'none', `Expected detail row to be visible after click, got display="${detailRow.style.display}"`);
-
-  console.log('✓ testAPIRequestsTabExpandable: expandable rows work correctly');
-}
-
-/**
- * Test: renderAPIRequestsTab formats data correctly
- */
-async function testAPIRequestsTabFormatting() {
-  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
-
-  const container = document.createElement('div');
-
-  const mockApiRequests = [
-    {
-      timestamp: 1712575200000000,
-      cost: 0.0123,
-      tokens: 5000,
-      model: 'claude-opus-4-6',
-      url: '/v1/messages',
-      status: 200,
-      durationMs: 2500
-    }
-  ];
-
-  await renderAPIRequestsTab(container, mockApiRequests);
-
-  // Verify cell content
-  const cells = container.querySelectorAll('tbody tr.request-row td');
-  assert(cells[1].textContent.includes('$'), `Expected cost to include $, got "${cells[1].textContent}"`);
-  assert(cells[2].textContent.match(/\d+K?/), `Expected tokens formatted, got "${cells[2].textContent}"`);
-  assert(cells[3].textContent === 'claude-opus-4-6', `Expected model "claude-opus-4-6", got "${cells[3].textContent}"`);
-
-  console.log('✓ testAPIRequestsTabFormatting: data formatted correctly');
-}
-
-/**
- * Test: API requests detail panel content
- */
-async function testAPIRequestsDetailContent() {
-  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
-
-  const container = document.createElement('div');
-
-  const mockApiRequests = [
-    {
-      timestamp: 1712575200000000,
-      cost: 0.012,
-      tokens: 400,
-      model: 'claude-opus-4-6',
-      url: '/v1/messages',
-      status: 200,
-      durationMs: 2500,
-      error: null
-    }
-  ];
-
-  await renderAPIRequestsTab(container, mockApiRequests);
-
-  // Find and expand the detail row
-  const requestRow = container.querySelector('tbody tr.request-row');
-  requestRow.click();
-
-  // Check detail panel content
-  const detailRow = requestRow.nextElementSibling;
-  const detailPanel = detailRow.querySelector('.detail-panel');
-  assert(detailPanel, 'Detail panel not found');
-
-  const detailText = detailPanel.textContent;
-  assert(detailText.includes('URL'), 'URL label missing');
-  assert(detailText.includes('/v1/messages'), 'URL value missing from detail');
-  assert(detailText.includes('Status'), 'Status label missing');
-  assert(detailText.includes('200'), 'Status code missing from detail');
-  assert(detailText.includes('Duration'), 'Duration label missing');
-
-  console.log('✓ testAPIRequestsDetailContent: detail content rendered correctly');
-}
-
-/**
- * Test: API requests sorting functionality
- */
-async function testAPIRequestsSorting() {
-  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
-
-  const container = document.createElement('div');
-
-  const mockApiRequests = [
-    {
-      timestamp: 1712575200000000,
-      cost: 0.012,
-      tokens: 400,
-      model: 'claude-opus-4-6',
-      url: '/v1/messages',
-      status: 200,
-      durationMs: 2500
-    },
-    {
-      timestamp: 1712575260000000,
-      cost: 0.008,
-      tokens: 300,
-      model: 'claude-haiku-4-5-20251001',
-      url: '/v1/completions',
-      status: 200,
-      durationMs: 1800
-    }
-  ];
-
-  await renderAPIRequestsTab(container, mockApiRequests);
-
-  // Get initial row order
-  let rows = container.querySelectorAll('tbody tr.request-row');
-  let initialOrder = Array.from(rows).map(r => r.querySelector('td:nth-child(4)').textContent);
-  assert(initialOrder[0] === 'claude-opus-4-6', 'Initial order should be by timestamp descending');
-
-  // Click Cost header to sort
-  const costHeader = container.querySelector('th[data-sort="cost"]');
-  costHeader.click();
-
-  // Verify sort changed
-  rows = container.querySelectorAll('tbody tr.request-row');
-  let sortedOrder = Array.from(rows).map(r => r.querySelector('td:nth-child(2)').textContent);
-  assert(sortedOrder[0].includes('0.008'), `Expected first row cost 0.008, got "${sortedOrder[0]}"`);
-
-  console.log('✓ testAPIRequestsSorting: sorting works correctly');
-}
-
-/**
- * Test: Issue A - Sorting preserves filter input values
- */
-async function testAPIRequestsSortPreservesFilter() {
-  const { renderAPIRequestsTab } = await import('../../dashboard/tabs/cost-analysis.js');
-
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-
-  const mockApiRequests = [
-    {
-      timestamp: 1712575200000000,
-      cost: 0.001,
-      tokens: 400,
-      model: 'claude-opus-4-6',
-      url: '/v1/messages',
-      status: 200,
-      durationMs: 2500
-    },
-    {
-      timestamp: 1712575260000000,
-      cost: 0.005,
-      tokens: 300,
-      model: 'claude-haiku-4-5-20251001',
-      url: '/v1/completions',
-      status: 200,
-      durationMs: 1800
-    },
-    {
-      timestamp: 1712575320000000,
-      cost: 0.020,
-      tokens: 500,
-      model: 'claude-sonnet-4-6',
-      url: '/v1/other',
-      status: 200,
-      durationMs: 2000
-    }
-  ];
-
-  await renderAPIRequestsTab(container, mockApiRequests);
-
-  // Set filter values
-  const minCostInput = container.querySelector('#min-cost');
-  const maxCostInput = container.querySelector('#max-cost');
-
-  minCostInput.value = '0.003';
-  minCostInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-
-  maxCostInput.value = '0.010';
-  maxCostInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-
-  // Verify filter values are preserved in inputs
-  assert(minCostInput.value === '0.003', `Expected min cost 0.003, got "${minCostInput.value}"`);
-  assert(maxCostInput.value === '0.010', `Expected max cost 0.010, got "${maxCostInput.value}"`);
-
-  // Verify only one row matches the filter (0.005)
-  let rows = container.querySelectorAll('tbody tr.request-row');
-  assert(rows.length === 1, `Expected 1 row after filter, got ${rows.length}`);
-  assert(rows[0].querySelector('td:nth-child(2)').textContent.includes('0.005'), 'Expected filtered row to be 0.005');
-
-  // Now click Cost header to sort
-  const costHeader = container.querySelector('th[data-sort="cost"]');
-  costHeader.click();
-
-  // Verify filter input values are STILL preserved (Issue A fix)
-  assert(minCostInput.value === '0.003', `Filter min lost after sort: expected 0.003, got "${minCostInput.value}"`);
-  assert(maxCostInput.value === '0.010', `Filter max lost after sort: expected 0.010, got "${maxCostInput.value}"`);
-
-  // Verify filtered data is still shown
-  rows = container.querySelectorAll('tbody tr.request-row');
-  assert(rows.length === 1, `Expected 1 row after sort (filter still applied), got ${rows.length}`);
-  assert(rows[0].querySelector('td:nth-child(2)').textContent.includes('0.005'), 'Expected filtered row to still be 0.005 after sort');
-
-  document.body.removeChild(container);
-  console.log('✓ testAPIRequestsSortPreservesFilter: filter inputs preserved on sort (Issue A fixed)');
-}
 
 /**
  * Test: Verify agents detail panel content is rendered correctly

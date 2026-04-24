@@ -102,16 +102,16 @@ async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
   // No filter dropdowns - render all data
 
   // Update tab badge counts
-  const skillsBadge = document.querySelector('[data-tab="skills"] .tab-count');
+  const skillsBadge = el.querySelector('[data-tab="skills"] .tab-count');
   if (skillsBadge) skillsBadge.textContent = skillCosts.length;
 
-  const agentsBadge = document.querySelector('[data-tab="agents"] .tab-count');
+  const agentsBadge = el.querySelector('[data-tab="agents"] .tab-count');
   if (agentsBadge) agentsBadge.textContent = subagentSessions.length;
 
-  const requestsBadge = document.querySelector('[data-tab="requests"] .tab-count');
+  const requestsBadge = el.querySelector('[data-tab="requests"] .tab-count');
   if (requestsBadge) requestsBadge.textContent = apiRequests.length;
 
-  const toolsBadge = document.querySelector('[data-tab="tools"] .tab-count');
+  const toolsBadge = el.querySelector('[data-tab="tools"] .tab-count');
   if (toolsBadge) toolsBadge.textContent = toolEvents.length;
 
   // Render summary cards with all data
@@ -400,7 +400,7 @@ function fmtDurationMs(ms) {
  * @param {HTMLElement} el - Container to render into
  * @param {Array} apiRequests - Array of API request objects
  */
-export async function renderAPIRequestsTab(el, apiRequests) {
+export function renderAPIRequestsTab(el, apiRequests) {
   let currentSort = { column: null, ascending: false };
   let filterMin = 0;
   let filterMax = Infinity;
@@ -498,9 +498,6 @@ export async function renderAPIRequestsTab(el, apiRequests) {
   }
 
   /**
-   * Attach expand/collapse handlers to request rows
-   */
-  /**
    * Handle filter input changes
    */
   minCostInput.addEventListener('change', () => {
@@ -538,7 +535,7 @@ export async function renderAPIRequestsTab(el, apiRequests) {
  * @param {HTMLElement} el - Container to render into
  * @param {Object} subagentCosts - Aggregated agent cost data with invocation_count, api_request_count, total_cost_usd
  */
-export async function renderAgentsTab(el, subagentCosts) {
+export function renderAgentsTab(el, subagentCosts) {
   if (!subagentCosts || subagentCosts.invocation_count === 0) {
     el.innerHTML = '<p class="empty">No agent invocations in this session.</p>';
     return;
@@ -583,7 +580,7 @@ export async function renderAgentsTab(el, subagentCosts) {
  * @param {Object} subagentCosts - Object of subagent cost data
  * @param {Array} apiRequests - Array of API request objects
  */
-export async function renderSummaryCards(el, skillCosts, subagentCosts, apiRequests) {
+export function renderSummaryCards(el, skillCosts, subagentCosts, apiRequests) {
   // Calculate totals — sum actual API request costs (the source of truth)
   const skillCostTotal = skillCosts.reduce((sum, s) => sum + (s.total_cost_usd || 0), 0);
   const agentCostTotal = subagentCosts.total_cost_usd || 0;
@@ -689,7 +686,7 @@ function renderSubagentsList(el, subagentSessions) {
  * @param {HTMLElement} el - Container to render into
  * @param {Array} toolEvents - Array of tool event objects
  */
-export async function renderToolsTab(el, toolEvents) {
+export function renderToolsTab(el, toolEvents) {
   if (!toolEvents || toolEvents.length === 0) {
     el.innerHTML = '<p class="empty">No tool invocations in this session.</p>';
     return;

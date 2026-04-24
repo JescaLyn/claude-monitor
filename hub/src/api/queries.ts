@@ -35,6 +35,21 @@ export interface SessionRow {
   parent_session_id: string | null;
 }
 
+export interface SubagentRow {
+  id: string;
+  name: string;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  api_request_count: number;
+}
+
+export interface SessionWithSubagents extends SessionRow {
+  subagents: SubagentRow[];
+}
+
 export interface ToolStat {
   tool_name: string;
   call_count: number;
@@ -123,6 +138,64 @@ export function getSessions(
   `).all(limit, offset) as SessionRow[];
 }
 
+export function getSessionsWithSubagents(
+  db: Database.Database,
+  limit = 50,
+  offset = 0,
+  sort = 'last_event_ts',
+  order = 'desc'
+): SessionWithSubagents[] {
+  if (!VALID_SORT_FIELDS.has(sort)) throw new Error(`Invalid sort field: ${sort}`);
+  if (!VALID_ORDERS.has(order)) throw new Error(`Invalid order: ${order}`);
+  const sortExpr = SORT_EXPR[sort];
+
+  // Fetch parent sessions (with aggregated totals including subagents)
+  const parentSessions = db.prepare(`
+    SELECT
+      s.id, s.machine_id, s.name, s.model, s.started_at, s.ended_at,
+      COALESCE(SUM(ar.cost_usd), 0) AS cost_usd,
+      COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
+      COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
+      COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
+      COALESCE(SUM(ar.cache_creation_tokens), 0) AS cache_creation_tokens,
+      COUNT(DISTINCT ar.id) AS api_request_count,
+      (SELECT COUNT(*) FROM tool_events WHERE session_id = s.id OR parent_session_id = s.id) AS tool_call_count,
+      MAX(ar.ts) AS last_event_ts,
+      s.parent_session_id
+    FROM sessions s
+    LEFT JOIN api_requests ar ON ar.session_id = s.id OR ar.session_id IN (
+      SELECT id FROM sessions WHERE parent_session_id = s.id
+    )
+    WHERE s.parent_session_id IS NULL
+    GROUP BY s.id
+    ORDER BY ${sortExpr} ${order}
+    LIMIT ? OFFSET ?
+  `).all(limit, offset) as any[];
+
+  // For each parent, fetch its subagents with individual metrics
+  return parentSessions.map(parent => {
+    const subagents = db.prepare(`
+      SELECT
+        s.id, s.model AS name,
+        COALESCE(SUM(ar.cost_usd), 0) AS cost_usd,
+        COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
+        COALESCE(SUM(ar.cache_creation_tokens), 0) AS cache_creation_tokens,
+        COUNT(DISTINCT ar.id) AS api_request_count
+      FROM sessions s
+      LEFT JOIN api_requests ar ON ar.agent_id = s.id
+      WHERE s.parent_session_id = ?
+      GROUP BY s.id
+    `).all(parent.id) as SubagentRow[];
+
+    return {
+      ...parent,
+      subagents,
+    };
+  });
+}
+
 export function getSession(db: Database.Database, id: string): SessionRow | null {
   // Read pre-computed denormalized counts from the sessions table
   return db.prepare(`
@@ -168,16 +241,6 @@ export function getSkillStats(db: Database.Database): SkillStat[] {
     GROUP BY skill_name
     ORDER BY call_count DESC
   `).all() as SkillStat[];
-}
-
-function estimateContextTokens(inputTokens: number, promptLength?: number): number {
-  if (!promptLength || promptLength <= 0) {
-    // No prompt data; conservative estimate: all input is context
-    return inputTokens;
-  }
-  // Estimate prompt tokens: ~1 token per 4 characters
-  const estimatedPromptTokens = Math.ceil(promptLength / 4);
-  return Math.max(0, inputTokens - estimatedPromptTokens);
 }
 
 export function getSkillCostsWithRequests(db: Database.Database): SkillCostBreakdown[] {
