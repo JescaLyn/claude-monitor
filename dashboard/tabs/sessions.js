@@ -144,11 +144,11 @@ function getModelName(fullModel) {
   return fullModel.split('/').pop() || fullModel;
 }
 
-async function loadModelsForRows(el) {
-  const rows = el.querySelectorAll('.session-row:not(.subagent-row)');
+async function loadModelsForSelection(el, selector, idExtractor) {
+  const rows = el.querySelectorAll(selector);
 
   for (const row of rows) {
-    const sessionId = row.dataset.id;
+    const sessionId = idExtractor(row);
     const modelsList = row.querySelector('.models-list');
 
     try {
@@ -184,105 +184,6 @@ async function loadModelsForRows(el) {
       console.error(err);
     }
   }
-
-  // Load models for subagent rows
-  const subagentRows = el.querySelectorAll('.subagent-row');
-  for (const row of subagentRows) {
-    const subagentId = row.dataset.id;
-    const modelsList = row.querySelector('.models-list');
-
-    try {
-      const models = await get(`/sessions/${encodeURIComponent(subagentId)}/models`);
-      if (models.length === 0) {
-        modelsList.innerHTML = 'No API requests';
-      } else {
-        const totalCost = models.reduce((sum, m) => sum + m.total_cost_usd, 0);
-        const totalRequests = models.reduce((sum, m) => sum + m.api_request_count, 0);
-
-        const html = `
-          <table class="inline-models-table">
-            <tbody>
-              ${models.map(m => {
-                const modelName = getModelName(m.model);
-                const costPct = totalCost > 0 ? ((m.total_cost_usd / totalCost) * 100).toFixed(1) : 0;
-                const reqPct = totalRequests > 0 ? ((m.api_request_count / totalRequests) * 100).toFixed(1) : 0;
-                return `
-                  <tr>
-                    <td class="model-name">${escapeHtml(modelName)}</td>
-                    <td class="model-requests">${reqPct}%</td>
-                    <td class="model-cost">${costPct}%</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        `;
-        modelsList.innerHTML = html;
-      }
-    } catch (err) {
-      modelsList.innerHTML = 'Error loading models';
-      console.error(err);
-    }
-  }
-}
-
-function attachNameHandlers(el) {
-  el.querySelectorAll('.session-name').forEach(cell => {
-    cell.style.cursor = 'pointer';
-    let tooltipTimeout = null;
-
-    cell.addEventListener('click', (e) => {
-      e.stopPropagation();  // Prevent row expand/collapse on name click
-      const sessionId = cell.dataset.id;
-      window.location.href = `/?tab=cost-analysis&session=${encodeURIComponent(sessionId)}`;
-    });
-
-    // Track mouse position while hovering
-    let currentMouseX = 0;
-    let currentMouseY = 0;
-
-    cell.addEventListener('mousemove', (e) => {
-      currentMouseX = e.clientX;
-      currentMouseY = e.clientY;
-    });
-
-    cell.addEventListener('mouseenter', (e) => {
-      currentMouseX = e.clientX;
-      currentMouseY = e.clientY;
-
-      tooltipTimeout = setTimeout(() => {
-        const sessionId = cell.dataset.id;
-        const tooltip = document.createElement('div');
-        tooltip.className = 'session-id-tooltip';
-
-        // Position off-screen initially so it can measure
-        tooltip.style.position = 'fixed';
-        tooltip.style.top = '-9999px';
-        tooltip.style.left = '0px';
-        tooltip.textContent = sessionId;
-        document.body.appendChild(tooltip);
-        cell.dataset.tooltip = 'true';
-
-        // Measure tooltip size
-        const tooltipRect = tooltip.getBoundingClientRect();
-
-        // Pin left edge to the left edge of the sessions table; position just above the cursor vertically.
-        const table = cell.closest('table');
-        const tableLeft = table ? table.getBoundingClientRect().left : 0;
-        const targetTop = currentMouseY - tooltipRect.height - 12;
-
-        tooltip.style.top = targetTop + 'px';
-        tooltip.style.left = Math.max(0, tableLeft) + 'px';
-      }, 300);
-    });
-
-    cell.addEventListener('mouseleave', () => {
-      clearTimeout(tooltipTimeout);
-      const tooltip = document.querySelector('.session-id-tooltip');
-      if (tooltip) tooltip.remove();
-      delete cell.dataset.tooltip;
-    });
-  });
 }
 
 async function renderPage(el, offset, sort = 'last_event_ts', order = 'desc', hours = DEFAULT_HOURS) {
@@ -295,63 +196,106 @@ async function renderPage(el, offset, sort = 'last_event_ts', order = 'desc', ho
 
   el.innerHTML = buildFilterControl(hours) + buildTable(paginatedRows, offset, sort, order, filteredRows.length);
 
-  loadModelsForRows(el);
-  attachNameHandlers(el);
+  // Load model data for all rows (parent and subagent)
+  loadModelsForSelection(el, '.session-row:not(.subagent-row)', r => r.dataset.id);
+  loadModelsForSelection(el, '.subagent-row', r => r.dataset.id);
+}
 
-  // Attach expand/collapse handler with proper event delegation
-  el.querySelector('table tbody')?.addEventListener('click', (e) => {
-    const row = (e.target).closest('tr.session-row[data-expandable="true"]');
-    if (!row) return;
+let currentPageState = {
+  offset: 0,
+  sort: 'last_event_ts',
+  order: 'desc',
+  hours: DEFAULT_HOURS
+};
+let listenersAttached = false;
 
-    // Ignore clicks on session name cell itself
-    const sessionNameCell = row.querySelector('.session-name');
+function handleTableClick(el, e) {
+  // Handle expand/collapse on expand icon or session row
+  const expandRow = (e.target).closest('tr.session-row[data-expandable="true"]');
+  if (expandRow) {
+    const sessionNameCell = expandRow.querySelector('.session-name');
     if (sessionNameCell && sessionNameCell.contains(e.target)) {
-      // Check if click target is the cell or content inside it
-      // Allow clicks on expand icon, but not on the name text
       const expandIcon = sessionNameCell.querySelector('.expand-icon');
       if (!expandIcon || !expandIcon.contains(e.target)) {
-        // Clicked on name text, let attachNameHandlers handle it
+        // Clicked on name text, handle navigation below
+      } else {
+        // Clicked on expand icon, toggle expansion
+        const sessionId = expandRow.dataset.id;
+        const willExpand = !expandedSessions.has(sessionId);
+        if (willExpand) {
+          expandedSessions.add(sessionId);
+        } else {
+          expandedSessions.delete(sessionId);
+        }
+
+        // Toggle icon and show/hide subagent rows without full re-render
+        expandIcon.textContent = willExpand ? '▼' : '▶';
+        const subagentRows = Array.from(el.querySelectorAll(`tr[data-parent-id="${sessionId}"]`));
+        for (const subRow of subagentRows) {
+          subRow.style.display = willExpand ? '' : 'none';
+        }
         return;
       }
     }
-
-    const sessionId = row.dataset.id;
-    if (expandedSessions.has(sessionId)) {
-      expandedSessions.delete(sessionId);
-    } else {
-      expandedSessions.add(sessionId);
-    }
-    renderPage(el, offset, sort, order, hours);
-  });
-
-  const timeSelect = el.querySelector('#time-range-select');
-  if (timeSelect) {
-    timeSelect.addEventListener('change', () => {
-      const newHours = parseInt(timeSelect.value, 10);
-      renderPage(el, 0, sort, order, newHours);
-    });
   }
 
-  el.querySelectorAll('.sort-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const timeSelect = el.querySelector('#time-range-select');
-      const hours = timeSelect ? parseInt(timeSelect.value, 10) : DEFAULT_HOURS;
-      renderPage(el, 0, btn.dataset.field, btn.dataset.order, hours);
-    });
-  });
+  // Handle sort button clicks
+  const sortBtn = (e.target).closest('.sort-btn');
+  if (sortBtn) {
+    const newSort = sortBtn.dataset.field;
+    const newOrder = sortBtn.dataset.order;
+    currentPageState = {
+      offset: 0,
+      sort: newSort,
+      order: newOrder,
+      hours: currentPageState.hours
+    };
+    renderPage(el, 0, newSort, newOrder, currentPageState.hours);
+    return;
+  }
 
-  el.querySelector('#prev-btn')?.addEventListener('click', () => {
-    const timeSelect = el.querySelector('#time-range-select');
-    const hours = timeSelect ? parseInt(timeSelect.value, 10) : DEFAULT_HOURS;
-    renderPage(el, Math.max(0, offset - LIMIT), sort, order, hours);
-  });
-  el.querySelector('#next-btn')?.addEventListener('click', () => {
-    const timeSelect = el.querySelector('#time-range-select');
-    const hours = timeSelect ? parseInt(timeSelect.value, 10) : DEFAULT_HOURS;
-    renderPage(el, offset + LIMIT, sort, order, hours);
-  });
+  // Handle pagination buttons
+  if (e.target.id === 'prev-btn') {
+    const newOffset = Math.max(0, currentPageState.offset - LIMIT);
+    currentPageState.offset = newOffset;
+    renderPage(el, newOffset, currentPageState.sort, currentPageState.order, currentPageState.hours);
+    return;
+  } else if (e.target.id === 'next-btn') {
+    const newOffset = currentPageState.offset + LIMIT;
+    currentPageState.offset = newOffset;
+    renderPage(el, newOffset, currentPageState.sort, currentPageState.order, currentPageState.hours);
+    return;
+  }
+
+  // Handle name clicks (navigation to cost-analysis)
+  const nameCell = (e.target).closest('.session-name');
+  if (nameCell && nameCell.textContent.trim()) {
+    const sessionId = nameCell.dataset.id;
+    if (sessionId) {
+      e.stopPropagation();
+      window.location.href = `/?tab=cost-analysis&session=${encodeURIComponent(sessionId)}`;
+    }
+  }
 }
 
 export async function render(el) {
-  await renderPage(el, 0, 'last_event_ts', 'desc', DEFAULT_HOURS);
+  // Attach persistent event listeners only once
+  if (!listenersAttached) {
+    el.addEventListener('click', (e) => handleTableClick(el, e));
+    el.addEventListener('change', (e) => {
+      if (e.target.id === 'time-range-select') {
+        const newHours = parseInt(e.target.value, 10);
+        currentPageState = {
+          offset: 0,
+          sort: currentPageState.sort,
+          order: currentPageState.order,
+          hours: newHours
+        };
+        renderPage(el, 0, currentPageState.sort, currentPageState.order, newHours);
+      }
+    });
+    listenersAttached = true;
+  }
+
+  await renderPage(el, currentPageState.offset, currentPageState.sort, currentPageState.order, currentPageState.hours);
 }
