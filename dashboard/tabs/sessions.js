@@ -1,5 +1,6 @@
 import { get, fmt$, fmtTokens, fmtDate, fmtDateNoSeconds, fmtDateParts, fmtDuration, escapeHtml } from '/utils.js';
 
+const expandedSessions = new Set();
 const LIMIT = 20;
 const DEFAULT_HOURS = 24;  // Default: show sessions active in the last 24 hours
 
@@ -84,10 +85,16 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
       </thead>
       <tbody>
         ${rows.map(r => {
+          const isExpanded = expandedSessions.has(r.id);
           const machineDisplay = simplifyMachineId(r.machine_id);
-          return `
-            <tr class="session-row" data-id="${escapeHtml(r.id)}">
-              ${nameCell(r)}
+          const expandIcon = r.subagents && r.subagents.length > 0 ? (isExpanded ? '▼' : '▶') : '';
+
+          let html = `
+            <tr class="session-row" data-id="${escapeHtml(r.id)}" data-expandable="${r.subagents && r.subagents.length > 0 ? 'true' : 'false'}">
+              <td class="session-name" data-id="${escapeHtml(r.id)}" style="cursor: pointer;">
+                <span class="expand-icon" style="display: inline-block; min-width: 16px;">${expandIcon}</span>
+                ${r.name ? escapeHtml(r.name) : `<span class="mono muted" title="${escapeHtml(r.id)}">${escapeHtml(r.id)}</span>`}
+              </td>
               <td class="td-center">${machineDisplay}</td>
               ${dateCell(r.started_at, 'td-center')}
               ${dateCell(r.last_event_ts)}
@@ -98,6 +105,27 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
               <td>${r.tool_call_count}</td>
             </tr>
           `;
+
+          // Add subagent rows if expanded and subagents exist
+          if (isExpanded && r.subagents && r.subagents.length > 0) {
+            html += r.subagents.map(s => `
+              <tr class="subagent-row" data-parent-id="${escapeHtml(r.id)}" data-id="${escapeHtml(s.id)}" style="background: #f9f9f9;">
+                <td class="session-name" data-id="${escapeHtml(s.id)}" style="cursor: pointer; padding-left: 30px; font-size: 11px; color: #666;">
+                  └ ${escapeHtml(s.name || s.id.slice(0, 8))}
+                </td>
+                <td class="td-center">—</td>
+                <td class="td-center">—</td>
+                <td>—</td>
+                <td class="td-center">${fmt$(s.cost_usd)}</td>
+                <td class="tokens-cell"><div class="token-row"><span class="token-in">${fmtTokens(s.input_tokens)}</span><span class="token-out">${fmtTokens(s.output_tokens)}</span></div></td>
+                <td class="models-cell"><span class="models-list">Loading...</span></td>
+                <td>${s.api_request_count}</td>
+                <td>—</td>
+              </tr>
+            `).join('');
+          }
+
+          return html;
         }).join('')}
       </tbody>
     </table>
@@ -117,7 +145,7 @@ function getModelName(fullModel) {
 }
 
 async function loadModelsForRows(el) {
-  const rows = el.querySelectorAll('.session-row');
+  const rows = el.querySelectorAll('.session-row:not(.subagent-row)');
 
   for (const row of rows) {
     const sessionId = row.dataset.id;
@@ -156,6 +184,46 @@ async function loadModelsForRows(el) {
       console.error(err);
     }
   }
+
+  // Load models for subagent rows
+  const subagentRows = el.querySelectorAll('.subagent-row');
+  for (const row of subagentRows) {
+    const subagentId = row.dataset.id;
+    const modelsList = row.querySelector('.models-list');
+
+    try {
+      const models = await get(`/sessions/${encodeURIComponent(subagentId)}/models`);
+      if (models.length === 0) {
+        modelsList.innerHTML = 'No API requests';
+      } else {
+        const totalCost = models.reduce((sum, m) => sum + m.total_cost_usd, 0);
+        const totalRequests = models.reduce((sum, m) => sum + m.api_request_count, 0);
+
+        const html = `
+          <table class="inline-models-table">
+            <tbody>
+              ${models.map(m => {
+                const modelName = getModelName(m.model);
+                const costPct = totalCost > 0 ? ((m.total_cost_usd / totalCost) * 100).toFixed(1) : 0;
+                const reqPct = totalRequests > 0 ? ((m.api_request_count / totalRequests) * 100).toFixed(1) : 0;
+                return `
+                  <tr>
+                    <td class="model-name">${escapeHtml(modelName)}</td>
+                    <td class="model-requests">${reqPct}%</td>
+                    <td class="model-cost">${costPct}%</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        `;
+        modelsList.innerHTML = html;
+      }
+    } catch (err) {
+      modelsList.innerHTML = 'Error loading models';
+      console.error(err);
+    }
+  }
 }
 
 function attachNameHandlers(el) {
@@ -163,7 +231,8 @@ function attachNameHandlers(el) {
     cell.style.cursor = 'pointer';
     let tooltipTimeout = null;
 
-    cell.addEventListener('click', () => {
+    cell.addEventListener('click', (e) => {
+      e.stopPropagation();  // Prevent row expand/collapse on name click
       const sessionId = cell.dataset.id;
       window.location.href = `/?tab=cost-analysis&session=${encodeURIComponent(sessionId)}`;
     });
@@ -217,7 +286,7 @@ function attachNameHandlers(el) {
 }
 
 async function renderPage(el, offset, sort = 'last_event_ts', order = 'desc', hours = DEFAULT_HOURS) {
-  const allRows = await get(`/sessions?limit=200&offset=0&sort=${sort}&order=${order}`);
+  const allRows = await get(`/sessions/with-subagents?limit=200&offset=0&sort=${sort}&order=${order}`);
   const threshold = getTimeThreshold(hours);
   const filteredRows = allRows.filter(r => !r.last_event_ts || r.last_event_ts >= threshold);
 
@@ -228,6 +297,32 @@ async function renderPage(el, offset, sort = 'last_event_ts', order = 'desc', ho
 
   loadModelsForRows(el);
   attachNameHandlers(el);
+
+  // Attach expand/collapse handler with proper event delegation
+  el.querySelector('table tbody')?.addEventListener('click', (e) => {
+    const row = (e.target).closest('tr.session-row[data-expandable="true"]');
+    if (!row) return;
+
+    // Ignore clicks on session name cell itself
+    const sessionNameCell = row.querySelector('.session-name');
+    if (sessionNameCell && sessionNameCell.contains(e.target)) {
+      // Check if click target is the cell or content inside it
+      // Allow clicks on expand icon, but not on the name text
+      const expandIcon = sessionNameCell.querySelector('.expand-icon');
+      if (!expandIcon || !expandIcon.contains(e.target)) {
+        // Clicked on name text, let attachNameHandlers handle it
+        return;
+      }
+    }
+
+    const sessionId = row.dataset.id;
+    if (expandedSessions.has(sessionId)) {
+      expandedSessions.delete(sessionId);
+    } else {
+      expandedSessions.add(sessionId);
+    }
+    renderPage(el, offset, sort, order, hours);
+  });
 
   const timeSelect = el.querySelector('#time-range-select');
   if (timeSelect) {
