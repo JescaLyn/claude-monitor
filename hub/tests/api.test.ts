@@ -250,3 +250,31 @@ describe('GET /api/sessions/:id/breakdown', () => {
     expect(res.body).toHaveProperty('error');
   });
 });
+
+describe('GET /api/sessions/with-subagents', () => {
+  it('returns parent sessions with subagent array', async () => {
+    const res = await supertest(app).get('/api/sessions/with-subagents?limit=20&offset=0&sort=cost_usd&order=desc');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].id).toBe('bf9aefc7-1d4c-4385-b5df-bd161e0c1ded');
+    expect(res.body[0]).toHaveProperty('cost_usd');
+    expect(Array.isArray(res.body[0].subagents)).toBe(true);
+  });
+
+  it('accepts valid sort field', async () => {
+    const res = await supertest(app).get('/api/sessions/with-subagents?sort=cost_usd&order=asc');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('returns 400 for invalid sort field', async () => {
+    const res = await supertest(app).get('/api/sessions/with-subagents?sort=invalid_field');
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for invalid order', async () => {
+    const res = await supertest(app).get('/api/sessions/with-subagents?order=sideways');
+    expect(res.status).toBe(400);
+  });
+});

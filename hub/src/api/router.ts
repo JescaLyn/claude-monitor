@@ -7,7 +7,7 @@ import {
   getSkillCostsWithRequests, getSubagentCostsWithRequests,
   getApiRequests, getSessionBreakdown, getModelBreakdownForSession,
   insertRateLimitSnapshots, getLatestRateLimits, getRateLimitsByMachine, getTotalPollingCost,
-  getSubagentSessions, getSkillInvocations,
+  getSubagentSessions, getSkillInvocations, getSessionsWithSubagents,
 } from './queries.js';
 import { resolveSessionName } from '../session-names.js';
 import type { SessionRow, RateLimitSnapshot } from './queries.js';
@@ -48,6 +48,19 @@ export function createApiRouter(db: Database.Database): Router {
     if (!VALID_SORT_FIELDS.has(sort))  { res.status(400).json({ error: 'Invalid sort field' }); return; }
     if (!VALID_ORDERS.has(order))      { res.status(400).json({ error: 'Invalid order' }); return; }
     const sessions = getSessions(db, limit, offset, sort, order);
+    res.json(sessions.map(enrichSessionWithName));
+  });
+
+  router.get('/sessions/with-subagents', (req, res) => {
+    const rawLimit  = parseInt(String(req.query.limit  ?? '50'), 10);
+    const rawOffset = parseInt(String(req.query.offset ?? '0'),  10);
+    const limit  = Math.min(isNaN(rawLimit)  ? 50  : rawLimit,  200);
+    const offset = Math.max(isNaN(rawOffset) ? 0   : rawOffset, 0);
+    const sort  = String(req.query.sort  ?? 'last_event_ts');
+    const order = String(req.query.order ?? 'desc');
+    if (!VALID_SORT_FIELDS.has(sort))  { res.status(400).json({ error: 'Invalid sort field' }); return; }
+    if (!VALID_ORDERS.has(order))      { res.status(400).json({ error: 'Invalid order' }); return; }
+    const sessions = getSessionsWithSubagents(db, limit, offset, sort, order);
     res.json(sessions.map(enrichSessionWithName));
   });
 
