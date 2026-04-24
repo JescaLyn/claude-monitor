@@ -52,6 +52,7 @@ export function ingestJsonlEntries(
     // Track affected sessions for aggregation refresh
     const affectedSessions = new Set<string>();
     const subagentIds = new Set<string>();
+    const subagentParents = new Map<string, string>(); // agentId -> sessionId (actual parent)
 
     // Extract metadata from first entry (all entries in a batch share the same project/parent)
     const project = entries.length > 0 ? extractProject(entries[0].cwd) : '';
@@ -91,17 +92,19 @@ export function ingestJsonlEntries(
         );
       }
 
-      // Collect subagent IDs from this entry
+      // Collect subagent IDs and track their actual parent session
       if (entry.agentId) {
         subagentIds.add(entry.agentId);
+        subagentParents.set(entry.agentId, sessionId); // Link agentId to its actual parent sessionId
       }
     }
 
     // Create synthetic subagent sessions from agentId entries
     for (const subagentId of subagentIds) {
       // Create subagent session if it doesn't exist
-      // Store null as model for synthetic subagent sessions
-      upsertSubagentSession.run(subagentId, machineId, null, now, project, parentSessionId, now);
+      // Link each subagent to the actual sessionId that spawned it, not the batch-level parentSessionId
+      const actualParentSessionId = subagentParents.get(subagentId) ?? null;
+      upsertSubagentSession.run(subagentId, machineId, null, now, project, actualParentSessionId, now);
       affectedSessions.add(subagentId);
     }
 

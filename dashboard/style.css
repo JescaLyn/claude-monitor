@@ -246,16 +246,11 @@ thead .stacked-header {
 }
 
 .session-name {
-  cursor: pointer;
-  color: var(--accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 180px;
-}
-
-.session-name:hover {
-  text-decoration: underline;
+  color: var(--text-primary);
 }
 
 .session-id-tooltip {
@@ -300,13 +295,14 @@ thead .stacked-header {
   color: var(--accent);
 }
 
-.session-name {
+.details-link {
+  color: var(--accent);
+  text-decoration: none;
   cursor: pointer;
-  position: relative;
 }
 
-.session-name:hover {
-  background: var(--bg-link-hover);
+.details-link:hover {
+  text-decoration: underline;
 }
 
 /* Pagination */

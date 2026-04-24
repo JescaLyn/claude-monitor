@@ -81,6 +81,7 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
           <th class="models-header"><div class="models-header-title">Models</div><table class="inline-models-header"><tbody><tr><td class="model-name">Model</td><td class="model-requests">Req %</td><td class="model-cost">Cost %</td></tr></tbody></table></th>
           ${sortHeader('API Reqs', 'api_request_count', sort, order)}
           ${sortHeader('Tools', 'tool_call_count', sort, order, 'th-center')}
+          <th style="width: 40px; text-align: center;">Details</th>
         </tr>
       </thead>
       <tbody>
@@ -91,7 +92,7 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
 
           let html = `
             <tr class="session-row" data-id="${escapeHtml(r.id)}" data-expandable="${r.subagents && r.subagents.length > 0 ? 'true' : 'false'}">
-              <td class="session-name" data-id="${escapeHtml(r.id)}" style="cursor: pointer;">
+              <td class="session-name">
                 <span class="expand-icon" style="display: inline-block; min-width: 16px;">${expandIcon}</span>
                 ${r.name ? escapeHtml(r.name) : `<span class="mono muted" title="${escapeHtml(r.id)}">${escapeHtml(r.id)}</span>`}
               </td>
@@ -103,14 +104,15 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
               <td class="models-cell"><span class="models-list">Loading...</span></td>
               <td>${r.api_request_count}</td>
               <td>${r.tool_call_count}</td>
+              <td style="text-align: center;"><a href="/cost-analysis?session=${encodeURIComponent(r.id)}" class="details-link">→</a></td>
             </tr>
           `;
 
-          // Add subagent rows if expanded and subagents exist
-          if (isExpanded && r.subagents && r.subagents.length > 0) {
+          // Add subagent rows (always render, hide by default)
+          if (r.subagents && r.subagents.length > 0) {
             html += r.subagents.map(s => `
-              <tr class="subagent-row" data-parent-id="${escapeHtml(r.id)}" data-id="${escapeHtml(s.id)}" style="background: #f9f9f9;">
-                <td class="session-name" data-id="${escapeHtml(s.id)}" style="cursor: pointer; padding-left: 30px; font-size: 11px; color: #666;">
+              <tr class="subagent-row" data-parent-id="${escapeHtml(r.id)}" data-id="${escapeHtml(s.id)}" style="background: #f9f9f9; display: ${isExpanded ? '' : 'none'};">
+                <td class="session-name" style="padding-left: 30px; font-size: 11px; color: #666;">
                   └ ${escapeHtml(s.name || s.id.slice(0, 8))}
                 </td>
                 <td class="td-center">—</td>
@@ -121,6 +123,7 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
                 <td class="models-cell"><span class="models-list">Loading...</span></td>
                 <td>${s.api_request_count}</td>
                 <td>—</td>
+                <td style="text-align: center;"><a href="/cost-analysis?session=${encodeURIComponent(s.id)}" class="details-link">→</a></td>
               </tr>
             `).join('');
           }
@@ -236,28 +239,23 @@ function handleTableClick(el, e) {
       return;
     }
 
-    // Check if click was on the name cell text (not the expand icon, not elsewhere on row)
-    if (sessionNameCell && sessionNameCell.contains(e.target)) {
-      // This will be handled by the name click handler below
+    // Clicked elsewhere on the row (not expand icon), toggle expansion
+    const willExpand = !expandedSessions.has(sessionId);
+    if (willExpand) {
+      expandedSessions.add(sessionId);
     } else {
-      // Clicked elsewhere on the row (not name cell, not expand icon), toggle expansion
-      const willExpand = !expandedSessions.has(sessionId);
-      if (willExpand) {
-        expandedSessions.add(sessionId);
-      } else {
-        expandedSessions.delete(sessionId);
-      }
-
-      // Toggle icon and show/hide subagent rows without full re-render
-      if (expandIcon) {
-        expandIcon.textContent = willExpand ? '▼' : '▶';
-      }
-      const subagentRows = Array.from(el.querySelectorAll(`tr[data-parent-id="${sessionId}"]`));
-      for (const subRow of subagentRows) {
-        subRow.style.display = willExpand ? '' : 'none';
-      }
-      return;
+      expandedSessions.delete(sessionId);
     }
+
+    // Toggle icon and show/hide subagent rows without full re-render
+    if (expandIcon) {
+      expandIcon.textContent = willExpand ? '▼' : '▶';
+    }
+    const subagentRows = Array.from(el.querySelectorAll(`tr[data-parent-id="${sessionId}"]`));
+    for (const subRow of subagentRows) {
+      subRow.style.display = willExpand ? '' : 'none';
+    }
+    return;
   }
 
   // Handle sort button clicks
@@ -286,16 +284,6 @@ function handleTableClick(el, e) {
     currentPageState.offset = newOffset;
     renderPage(el, newOffset, currentPageState.sort, currentPageState.order, currentPageState.hours);
     return;
-  }
-
-  // Handle name clicks (navigation to cost-analysis)
-  const nameCell = (e.target).closest('.session-name');
-  if (nameCell && nameCell.textContent.trim()) {
-    const sessionId = nameCell.dataset.id;
-    if (sessionId) {
-      e.stopPropagation();
-      window.location.href = `/?tab=cost-analysis&session=${encodeURIComponent(sessionId)}`;
-    }
   }
 }
 

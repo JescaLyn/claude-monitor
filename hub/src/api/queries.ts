@@ -180,7 +180,11 @@ export function getSessionsWithSubagents(
     const allSubagents = db.prepare(`
       SELECT
         s.id, COALESCE(s.model, s.id) AS name,
-        COALESCE(SUM(ar.cost_usd), 0) AS cost_usd,
+        COALESCE(ROUND(
+          (SELECT COALESCE(SUM(cost_usd), 0) FROM api_requests WHERE session_id = s.parent_session_id AND agent_id IS NULL) *
+          COUNT(DISTINCT ar.id) /
+          NULLIF((SELECT COUNT(*) FROM api_requests WHERE session_id = s.parent_session_id), 0),
+          8), 0) AS cost_usd,
         COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
         COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
         COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
@@ -188,7 +192,7 @@ export function getSessionsWithSubagents(
         COUNT(DISTINCT ar.id) AS api_request_count,
         s.parent_session_id
       FROM sessions s
-      LEFT JOIN api_requests ar ON ar.agent_id = s.id
+      LEFT JOIN api_requests ar ON ar.session_id = s.parent_session_id AND ar.agent_id = s.id
       WHERE s.parent_session_id IN (${parentIds.map(() => '?').join(',')})
       GROUP BY s.id
     `).all(...parentIds) as (SubagentRow & { parent_session_id: string })[];
@@ -625,15 +629,21 @@ export function getSubagentSessions(
 ): SubagentSession[] {
   return db.prepare(`
     SELECT
-      s.id, s.model, s.cost_usd,
-      s.input_tokens, s.output_tokens,
+      s.id, s.model,
+      COALESCE(ROUND(
+        (SELECT COALESCE(SUM(cost_usd), 0) FROM api_requests WHERE session_id = ?) *
+        COUNT(DISTINCT ar.id) /
+        NULLIF((SELECT COUNT(*) FROM api_requests WHERE session_id = ?), 0),
+        8), 0) AS cost_usd,
+      COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
+      COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
       COUNT(DISTINCT ar.id) AS api_request_count
     FROM sessions s
-    LEFT JOIN api_requests ar ON ar.session_id = s.id
+    LEFT JOIN api_requests ar ON ar.session_id = ? AND ar.agent_id = s.id
     WHERE s.parent_session_id = ?
     GROUP BY s.id
-    ORDER BY s.cost_usd DESC
-  `).all(parentSessionId) as SubagentSession[];
+    ORDER BY cost_usd DESC
+  `).all(parentSessionId, parentSessionId, parentSessionId, parentSessionId) as SubagentSession[];
 }
 
 /**

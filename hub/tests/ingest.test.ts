@@ -7,7 +7,9 @@ import { runMigrations } from '../src/db.js';
 import { parseLogsPayload } from '../src/parser/logs.js';
 import { parseMetricsPayload } from '../src/parser/metrics.js';
 import { ingestLogPayload, ingestMetricSnapshots } from '../src/ingest.js';
+import { ingestJsonlEntries } from '../src/jsonl/ingest.js';
 import type { OtelLogsPayload, OtelMetricsPayload } from '../src/types.js';
+import type { JsonlEntry } from '../src/jsonl/parser.js';
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../..');
 const LOG_SAMPLE = JSON.parse(
@@ -67,6 +69,59 @@ describe('ingestLogPayload', () => {
     const evtCount = (db.prepare('SELECT COUNT(*) as c FROM tool_events').get() as { c: number }).c;
     expect(reqCount).toBe(1);
     expect(evtCount).toBe(1);
+  });
+});
+
+describe('ingestJsonlEntries with subagents', () => {
+  let db: Database.Database;
+  beforeEach(() => { db = freshDb(); });
+
+  it('links subagent sessions to their correct parent sessionId', () => {
+    const parentSessionId = 'parent-session-123';
+    const agentId = 'agent-456';
+
+    // Create JSONL entries with a parent session and a subagent indicator
+    const entries: JsonlEntry[] = [
+      {
+        sessionId: parentSessionId,
+        agentId: null,
+        timestamp: '2026-04-23T12:00:00.000Z',
+        cwd: '/test/project',
+        costUSD: 0.01,
+        message: {
+          id: 'msg-1',
+          model: 'claude-sonnet-4-6',
+          usage: { input_tokens: 100, output_tokens: 50 }
+        }
+      } as JsonlEntry,
+      {
+        sessionId: parentSessionId,
+        agentId: agentId,
+        timestamp: '2026-04-23T12:00:01.000Z',
+        cwd: '/test/project',
+        costUSD: 0.005,
+        message: {
+          id: 'msg-2',
+          model: 'claude-sonnet-4-6',
+          usage: { input_tokens: 50, output_tokens: 25 }
+        }
+      } as JsonlEntry
+    ];
+
+    ingestJsonlEntries(db, entries, 'test-machine');
+
+    // Verify parent session exists
+    const parentSession = db.prepare('SELECT id FROM sessions WHERE id = ?')
+      .get(parentSessionId) as Record<string, unknown> | undefined;
+    expect(parentSession).toBeDefined();
+    expect(parentSession?.id).toBe(parentSessionId);
+
+    // Verify subagent session exists and is linked to the correct parent
+    const subagentSession = db.prepare('SELECT id, parent_session_id FROM sessions WHERE id = ?')
+      .get(agentId) as Record<string, unknown> | undefined;
+    expect(subagentSession).toBeDefined();
+    expect(subagentSession?.id).toBe(agentId);
+    expect(subagentSession?.parent_session_id).toBe(parentSessionId);
   });
 });
 
