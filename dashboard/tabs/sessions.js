@@ -213,29 +213,50 @@ function handleTableClick(el, e) {
   // Handle expand/collapse on expand icon or session row
   const expandRow = (e.target).closest('tr.session-row[data-expandable="true"]');
   if (expandRow) {
+    const sessionId = expandRow.dataset.id;
     const sessionNameCell = expandRow.querySelector('.session-name');
-    if (sessionNameCell && sessionNameCell.contains(e.target)) {
-      const expandIcon = sessionNameCell.querySelector('.expand-icon');
-      if (!expandIcon || !expandIcon.contains(e.target)) {
-        // Clicked on name text, handle navigation below
-      } else {
-        // Clicked on expand icon, toggle expansion
-        const sessionId = expandRow.dataset.id;
-        const willExpand = !expandedSessions.has(sessionId);
-        if (willExpand) {
-          expandedSessions.add(sessionId);
-        } else {
-          expandedSessions.delete(sessionId);
-        }
+    const expandIcon = sessionNameCell?.querySelector('.expand-icon');
 
-        // Toggle icon and show/hide subagent rows without full re-render
-        expandIcon.textContent = willExpand ? '▼' : '▶';
-        const subagentRows = Array.from(el.querySelectorAll(`tr[data-parent-id="${sessionId}"]`));
-        for (const subRow of subagentRows) {
-          subRow.style.display = willExpand ? '' : 'none';
-        }
-        return;
+    // Check if click was on the expand icon
+    if (expandIcon && expandIcon.contains(e.target)) {
+      // Clicked on expand icon, toggle expansion
+      const willExpand = !expandedSessions.has(sessionId);
+      if (willExpand) {
+        expandedSessions.add(sessionId);
+      } else {
+        expandedSessions.delete(sessionId);
       }
+
+      // Toggle icon and show/hide subagent rows without full re-render
+      expandIcon.textContent = willExpand ? '▼' : '▶';
+      const subagentRows = Array.from(el.querySelectorAll(`tr[data-parent-id="${sessionId}"]`));
+      for (const subRow of subagentRows) {
+        subRow.style.display = willExpand ? '' : 'none';
+      }
+      return;
+    }
+
+    // Check if click was on the name cell text (not the expand icon, not elsewhere on row)
+    if (sessionNameCell && sessionNameCell.contains(e.target)) {
+      // This will be handled by the name click handler below
+    } else {
+      // Clicked elsewhere on the row (not name cell, not expand icon), toggle expansion
+      const willExpand = !expandedSessions.has(sessionId);
+      if (willExpand) {
+        expandedSessions.add(sessionId);
+      } else {
+        expandedSessions.delete(sessionId);
+      }
+
+      // Toggle icon and show/hide subagent rows without full re-render
+      if (expandIcon) {
+        expandIcon.textContent = willExpand ? '▼' : '▶';
+      }
+      const subagentRows = Array.from(el.querySelectorAll(`tr[data-parent-id="${sessionId}"]`));
+      for (const subRow of subagentRows) {
+        subRow.style.display = willExpand ? '' : 'none';
+      }
+      return;
     }
   }
 
