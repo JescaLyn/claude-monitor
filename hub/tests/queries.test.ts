@@ -83,4 +83,26 @@ describe('getSessionsWithSubagents', () => {
     expect(result[0].id).toBe('parent-1');  // 0.80 cost
     expect(result[1].id).toBe('parent-2');  // 0.10 cost
   });
+
+  it('returns empty subagents array for parent with no subagents', () => {
+    // Insert parent with no subagents
+    db.prepare(`
+      INSERT INTO sessions (id, machine_id, started_at, cost_usd, input_tokens,
+                           output_tokens, cache_read_tokens, cache_creation_tokens,
+                           api_request_count, tool_call_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('parent-3', 'macbook', 1000200, 0.05, 1000, 100, 0, 0, 1, 0);
+
+    db.prepare(`
+      INSERT INTO api_requests (id, session_id, ts, prompt_id, model, cost_usd,
+                               input_tokens, output_tokens, cache_read_tokens,
+                               cache_creation_tokens, agent_id, event_sequence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('req-4', 'parent-3', 1000200, 'prompt-4', 'claude-haiku', 0.05, 1000, 100, 0, 0, null, 0);
+
+    const result = getSessionsWithSubagents(db, 50, 0, 'cost_usd', 'desc');
+    const parent3 = result.find(r => r.id === 'parent-3');
+    expect(parent3).toBeDefined();
+    expect(parent3!.subagents).toHaveLength(0);
+  });
 });

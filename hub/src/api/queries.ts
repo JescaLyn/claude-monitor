@@ -170,30 +170,44 @@ export function getSessionsWithSubagents(
     GROUP BY s.id
     ORDER BY ${sortExpr} ${order}
     LIMIT ? OFFSET ?
-  `).all(limit, offset) as any[];
+  `).all(limit, offset) as Omit<SessionWithSubagents, 'subagents'>[];
 
-  // For each parent, fetch its subagents with individual metrics
-  return parentSessions.map(parent => {
-    const subagents = db.prepare(`
+  // Fetch all subagents for all parents in one query (prevents N+1)
+  const subagentsByParent: Record<string, SubagentRow[]> = {};
+  const parentIds = parentSessions.map(p => p.id);
+
+  if (parentIds.length > 0) {
+    const allSubagents = db.prepare(`
       SELECT
-        s.id, s.model AS name,
+        s.id, COALESCE(s.model, s.id) AS name,
         COALESCE(SUM(ar.cost_usd), 0) AS cost_usd,
         COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
         COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
         COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
         COALESCE(SUM(ar.cache_creation_tokens), 0) AS cache_creation_tokens,
-        COUNT(DISTINCT ar.id) AS api_request_count
+        COUNT(DISTINCT ar.id) AS api_request_count,
+        s.parent_session_id
       FROM sessions s
       LEFT JOIN api_requests ar ON ar.agent_id = s.id
-      WHERE s.parent_session_id = ?
+      WHERE s.parent_session_id IN (${parentIds.map(() => '?').join(',')})
       GROUP BY s.id
-    `).all(parent.id) as SubagentRow[];
+    `).all(...parentIds) as (SubagentRow & { parent_session_id: string })[];
 
-    return {
-      ...parent,
-      subagents,
-    };
-  });
+    // Group by parent_session_id
+    for (const subagent of allSubagents) {
+      const { parent_session_id, ...subagentRow } = subagent;
+      if (!subagentsByParent[parent_session_id]) {
+        subagentsByParent[parent_session_id] = [];
+      }
+      subagentsByParent[parent_session_id].push(subagentRow);
+    }
+  }
+
+  // Map parents with their subagents
+  return parentSessions.map(parent => ({
+    ...parent,
+    subagents: subagentsByParent[parent.id] || [],
+  }));
 }
 
 export function getSession(db: Database.Database, id: string): SessionRow | null {
