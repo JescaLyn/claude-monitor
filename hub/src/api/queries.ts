@@ -179,7 +179,8 @@ export function getSessionsWithSubagents(
   if (parentIds.length > 0) {
     const allSubagents = db.prepare(`
       SELECT
-        s.id, COALESCE(s.model, s.id) AS name,
+        s.id,
+        (SELECT DISTINCT model FROM api_requests WHERE session_id = s.parent_session_id AND agent_id = s.id LIMIT 1) AS name,
         COALESCE(ROUND(
           (SELECT COALESCE(SUM(cost_usd), 0) FROM api_requests WHERE session_id = s.parent_session_id AND agent_id IS NULL) *
           COUNT(DISTINCT ar.id) /
@@ -629,7 +630,8 @@ export function getSubagentSessions(
 ): SubagentSession[] {
   return db.prepare(`
     SELECT
-      s.id, s.model,
+      s.id,
+      (SELECT DISTINCT model FROM api_requests WHERE session_id = ? AND agent_id = s.id LIMIT 1) AS model,
       COALESCE(ROUND(
         (SELECT COALESCE(SUM(cost_usd), 0) FROM api_requests WHERE session_id = ?) *
         COUNT(DISTINCT ar.id) /
@@ -643,7 +645,7 @@ export function getSubagentSessions(
     WHERE s.parent_session_id = ?
     GROUP BY s.id
     ORDER BY cost_usd DESC
-  `).all(parentSessionId, parentSessionId, parentSessionId, parentSessionId) as SubagentSession[];
+  `).all(parentSessionId, parentSessionId, parentSessionId, parentSessionId, parentSessionId) as SubagentSession[];
 }
 
 /**
