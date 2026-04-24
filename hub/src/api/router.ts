@@ -60,8 +60,14 @@ export function createApiRouter(db: Database.Database): Router {
     const order = String(req.query.order ?? 'desc');
     if (!VALID_SORT_FIELDS.has(sort))  { res.status(400).json({ error: 'Invalid sort field' }); return; }
     if (!VALID_ORDERS.has(order))      { res.status(400).json({ error: 'Invalid order' }); return; }
-    const sessions = getSessionsWithSubagents(db, limit, offset, sort, order);
-    res.json(sessions.map(enrichSessionWithName));
+    try {
+      const sessions = getSessionsWithSubagents(db, limit, offset, sort, order);
+      res.json(sessions.map(enrichSessionWithName));
+    } catch (err) {
+      const error = err as any;
+      console.error('[api] Error fetching sessions with subagents:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch sessions' });
+    }
   });
 
   router.get('/sessions/:id', (req, res) => {
