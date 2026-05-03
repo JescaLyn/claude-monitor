@@ -110,14 +110,16 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
 
           // Add subagent rows (always render, hide by default)
           if (r.subagents && r.subagents.length > 0) {
-            html += r.subagents.map(s => `
+            html += r.subagents.map(s => {
+              const label = s.agent_type || (s.name ? s.name.replace(/claude-/i, '').replace(/-\d{8}.*$/, '') : null) || s.id.slice(0, 8);
+              return `
               <tr class="subagent-row" data-parent-id="${escapeHtml(r.id)}" data-id="${escapeHtml(s.id)}" style="background: #f9f9f9; display: ${isExpanded ? '' : 'none'};">
                 <td class="session-name" style="padding-left: 30px; font-size: 11px; color: #666;">
-                  └ ${escapeHtml(s.name || s.id.slice(0, 8))}
+                  └ ${escapeHtml(label)}
                 </td>
                 <td class="td-center">—</td>
-                <td class="td-center">—</td>
-                <td>—</td>
+                ${s.started_at ? dateCell(s.started_at, 'td-center') : '<td class="td-center">—</td>'}
+                ${s.last_event_ts ? dateCell(s.last_event_ts) : '<td>—</td>'}
                 <td class="td-center">${fmt$(s.cost_usd)}</td>
                 <td class="tokens-cell"><div class="token-row"><span class="token-in">${fmtTokens(s.input_tokens)}</span><span class="token-out">${fmtTokens(s.output_tokens)}</span></div></td>
                 <td class="models-cell"><span class="models-list">Loading...</span></td>
@@ -125,7 +127,7 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
                 <td>—</td>
                 <td style="text-align: center;"><a href="/cost-analysis?session=${encodeURIComponent(s.id)}" class="details-link">→</a></td>
               </tr>
-            `).join('');
+            `}).join('');
           }
 
           return html;

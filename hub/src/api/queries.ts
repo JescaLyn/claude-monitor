@@ -45,6 +45,8 @@ export interface SubagentRow {
   cache_creation_tokens: number;
   api_request_count: number;
   agent_type?: string | null;
+  started_at?: number | null;
+  last_event_ts?: number | null;
 }
 
 export interface SessionWithSubagents extends SessionRow {
@@ -87,12 +89,12 @@ export interface CostByMachine {
 export function getOverview(db: Database.Database): OverviewStats {
   return db.prepare(`
     SELECT
-      (SELECT COALESCE(SUM(cost_usd), 0) FROM sessions) AS total_cost_usd,
+      COALESCE(SUM(cost_usd), 0)              AS total_cost_usd,
       COUNT(*)                                AS total_sessions,
-      (SELECT COALESCE(SUM(input_tokens), 0) FROM sessions)          AS total_input_tokens,
-      (SELECT COALESCE(SUM(output_tokens), 0) FROM sessions)         AS total_output_tokens,
-      (SELECT COALESCE(SUM(cache_read_tokens), 0) FROM sessions)     AS total_cache_read_tokens,
-      (SELECT COALESCE(SUM(cache_creation_tokens), 0) FROM sessions) AS total_cache_creation_tokens,
+      COALESCE(SUM(input_tokens), 0)          AS total_input_tokens,
+      COALESCE(SUM(output_tokens), 0)         AS total_output_tokens,
+      COALESCE(SUM(cache_read_tokens), 0)     AS total_cache_read_tokens,
+      COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
       (SELECT COUNT(*) FROM api_requests)     AS total_api_requests
     FROM sessions
     WHERE parent_session_id IS NULL
@@ -160,7 +162,7 @@ export function getSessionsWithSubagents(
       COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
       COALESCE(SUM(ar.cache_creation_tokens), 0) AS cache_creation_tokens,
       COUNT(DISTINCT ar.id) AS api_request_count,
-      (SELECT COUNT(*) FROM tool_events WHERE session_id = s.id OR parent_session_id = s.id) AS tool_call_count,
+      (SELECT COUNT(*) FROM tool_events WHERE session_id = s.id) AS tool_call_count,
       MAX(ar.ts) AS last_event_ts,
       s.parent_session_id
     FROM sessions s
@@ -189,11 +191,14 @@ export function getSessionsWithSubagents(
         COALESCE(SUM(ar.cache_creation_tokens), 0) AS cache_creation_tokens,
         COUNT(DISTINCT ar.id) AS api_request_count,
         s.agent_type,
-        s.parent_session_id
+        s.parent_session_id,
+        MIN(ar.ts) AS started_at,
+        MAX(ar.ts) AS last_event_ts
       FROM sessions s
       LEFT JOIN api_requests ar ON ar.session_id = s.parent_session_id AND ar.agent_id = s.id
       WHERE s.parent_session_id IN (${parentIds.map(() => '?').join(',')})
       GROUP BY s.id
+      HAVING COUNT(DISTINCT ar.id) > 0
     `).all(...parentIds) as (SubagentRow & { parent_session_id: string })[];
 
     // Group by parent_session_id

@@ -5,7 +5,7 @@ export function ingestJsonlEntries(
   db: Database.Database,
   entries: JsonlEntry[],
   machineId: string,
-  filePath?: string,
+  _filePath?: string,
   sessionNames?: Map<string, string>
 ): void {
   const upsertMachine = db.prepare(`
@@ -27,8 +27,11 @@ export function ingestJsonlEntries(
   `);
 
   const upsertSubagentSession = db.prepare(`
-    INSERT OR IGNORE INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts, agent_type)
+    INSERT INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts, agent_type)
     VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      parent_session_id = COALESCE(sessions.parent_session_id, excluded.parent_session_id),
+      agent_type = COALESCE(sessions.agent_type, excluded.agent_type)
   `);
 
   const updateSessionName = db.prepare(`
@@ -50,7 +53,7 @@ export function ingestJsonlEntries(
 
   const now = Date.now() * 1000;
 
-  const tx = db.transaction((entries: JsonlEntry[]) => {
+  const tx = db.transaction((entries: JsonlEntry[], names: Map<string, string>) => {
     // Upsert machine
     upsertMachine.run(machineId, now, now);
 
@@ -62,16 +65,18 @@ export function ingestJsonlEntries(
 
     // Extract metadata from first entry (all entries in a batch share the same project/parent)
     const project = entries.length > 0 ? extractProject(entries[0].cwd) : '';
-    const parentSessionId = filePath ? extractParentSessionId(filePath) : null;
 
     // First pass: process api_requests and collect parent session/project info
     for (const entry of entries) {
       const sessionId = entry.sessionId;
       affectedSessions.add(sessionId);
 
-      // Upsert session
+      // parent_session_id is always null here — subagent relationships are established
+      // separately via upsertSubagentSession using entry.agentId. Subagent JSONL entries
+      // use the parent's UUID as sessionId, so using the file-path-derived parent would
+      // create a self-referential row (id == parent_session_id).
       const startedAtMs = new Date(entry.timestamp).getTime();
-      upsertSession.run(sessionId, machineId, entry.message?.model ?? 'unknown', startedAtMs, project, parentSessionId);
+      upsertSession.run(sessionId, machineId, entry.message?.model ?? 'unknown', startedAtMs, project, null);
 
       // Update session name if provided
       if (entry.sessionName) {
@@ -115,8 +120,6 @@ export function ingestJsonlEntries(
 
     // Create synthetic subagent sessions from agentId entries
     for (const subagentId of subagentIds) {
-      // Create subagent session if it doesn't exist
-      // Link each subagent to the actual sessionId that spawned it, not the batch-level parentSessionId
       const actualParentSessionId = subagentParents.get(subagentId) ?? null;
       const agentType = subagentTypes.get(subagentId) ?? null;
       upsertSubagentSession.run(subagentId, machineId, null, now, project, actualParentSessionId, now, agentType);
@@ -135,17 +138,14 @@ export function ingestJsonlEntries(
         sid, filterId, sid, sid, filterId, sid, sid
       );
     }
+
+    // Apply session names from standalone custom-title entries (not carried on cost-bearing entries)
+    for (const [sessionId, name] of names.entries()) {
+      updateSessionName.run(name, sessionId);
+    }
   });
 
-  tx(entries);
-
-  // Update session names from metadata
-  if (sessionNames && sessionNames.size > 0) {
-    const updateName = db.prepare("UPDATE sessions SET name = ? WHERE id = ? AND (name IS NULL OR name = '')");
-    for (const [sessionId, name] of sessionNames.entries()) {
-      updateName.run(name, sessionId);
-    }
-  }
+  tx(entries, sessionNames ?? new Map());
 }
 
 /**
@@ -158,17 +158,3 @@ function extractProject(cwd?: string): string {
   return parts[parts.length - 1] || '';
 }
 
-/**
- * Extract parent session ID from subagent file path.
- * Example: /path/to/PARENT_ID/subagents/agent-*.jsonl → PARENT_ID
- * Returns null if not a subagent session.
- */
-function extractParentSessionId(filePath: string): string | null {
-  const parts = filePath.split('/');
-  const subagentsIndex = parts.indexOf('subagents');
-  if (subagentsIndex > 0) {
-    // Parent session ID is the directory before 'subagents'
-    return parts[subagentsIndex - 1] || null;
-  }
-  return null;
-}

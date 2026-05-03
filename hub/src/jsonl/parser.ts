@@ -45,7 +45,7 @@ export function parseFile(
     const stat = statSync(filePath);
 
     // File hasn't grown since last parse
-    if (stat.size <= fromOffset) {
+    if (stat.size === fromOffset) {
       return { entries: [], sessionNames: new Map(), newOffset: fromOffset };
     }
 
@@ -108,6 +108,34 @@ export function parseFile(
     console.error(`[jsonl-parser] Error reading ${filePath}:`, err instanceof Error ? err.message : String(err));
     return { entries: [], sessionNames: new Map(), newOffset: fromOffset };
   }
+}
+
+// Pricing per million tokens (derived from OTel cost data via regression).
+// Format: [input, output, cache_read, cache_write]
+const MODEL_PRICING: Record<string, [number, number, number, number]> = {
+  'claude-haiku-4-5':  [1.00,  5.00, 0.10,  1.25],
+  'claude-sonnet-4-6': [3.00, 15.00, 0.30,  3.75],
+  'claude-opus-4-7':   [5.00, 25.00, 0.50,  6.25],
+  // Fallback for older/unknown models — use sonnet rates
+  'default':           [3.00, 15.00, 0.30,  3.75],
+};
+
+function computeCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number,
+  cacheCreationTokens: number
+): number {
+  let pricing = MODEL_PRICING['default'];
+  for (const [key, rates] of Object.entries(MODEL_PRICING)) {
+    if (key !== 'default' && model.includes(key)) {
+      pricing = rates;
+      break;
+    }
+  }
+  const [pIn, pOut, pCr, pCw] = pricing;
+  return (inputTokens * pIn + outputTokens * pOut + cacheReadTokens * pCr + cacheCreationTokens * pCw) / 1_000_000;
 }
 
 /**
@@ -183,12 +211,19 @@ function normalizeEntry(raw: unknown): JsonlEntry | null {
   // Extract session name from customTitle if present
   const sessionName = obj.customTitle as string | undefined;
 
+  const cacheCreationTokens = usage.cache_creation_input_tokens as number ?? 0;
+  const cacheReadTokens = usage.cache_read_input_tokens as number ?? 0;
+  const rawCost = obj.costUSD as number | null | undefined;
+  const costUSD = (rawCost != null && rawCost > 0)
+    ? rawCost
+    : computeCost(model, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens);
+
   return {
     sessionId: obj.sessionId as string,
     timestamp: obj.timestamp as string,
     type: 'assistant',
-    costUSD: (obj.costUSD as number) ?? 0,
-    agentId: obj.agentId ?? (obj.toolUseResult as Record<string, unknown>)?.agentId as string | undefined,
+    costUSD,
+    agentId: (obj.agentId ?? (obj.toolUseResult as Record<string, unknown>)?.agentId) as string | undefined,
     agentType,
     sessionName,
     message: {
@@ -197,8 +232,8 @@ function normalizeEntry(raw: unknown): JsonlEntry | null {
       usage: {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
-        cache_creation_input_tokens: usage.cache_creation_input_tokens as number | undefined,
-        cache_read_input_tokens: usage.cache_read_input_tokens as number | undefined,
+        cache_creation_input_tokens: cacheCreationTokens || undefined,
+        cache_read_input_tokens: cacheReadTokens || undefined,
       },
     },
     cwd: obj.cwd as string | undefined,

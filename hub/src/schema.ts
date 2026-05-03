@@ -131,4 +131,41 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE sessions ADD COLUMN agent_type TEXT;
   `,
+
+  // Migration 8: fix self-referential parent_session_id rows created by a bug where
+  // subagent JSONL entries (which use the parent's UUID as sessionId) caused the parent
+  // session to be inserted with parent_session_id = itself before the real parent JSONL
+  // was processed.
+  `
+  UPDATE sessions SET parent_session_id = NULL WHERE parent_session_id = id;
+  `,
+
+  // Migration 9: back-fill cost_usd for JSONL-sourced api_requests where costUSD was null
+  // in the JSONL files (all JSONL entries). Uses per-model token pricing to compute cost.
+  `
+  UPDATE api_requests SET cost_usd = (
+    CASE
+      WHEN model LIKE '%haiku-4-5%' THEN
+        (input_tokens * 1.0 + output_tokens * 5.0 + cache_read_tokens * 0.10 + cache_creation_tokens * 1.25) / 1000000
+      WHEN model LIKE '%sonnet-4-6%' THEN
+        (input_tokens * 3.0 + output_tokens * 15.0 + cache_read_tokens * 0.30 + cache_creation_tokens * 3.75) / 1000000
+      WHEN model LIKE '%opus-4-7%' THEN
+        (input_tokens * 5.0 + output_tokens * 25.0 + cache_read_tokens * 0.50 + cache_creation_tokens * 6.25) / 1000000
+      ELSE
+        (input_tokens * 3.0 + output_tokens * 15.0 + cache_read_tokens * 0.30 + cache_creation_tokens * 3.75) / 1000000
+    END
+  )
+  WHERE duration_ms IS NULL AND cost_usd = 0 AND input_tokens > 0;
+  `,
+
+  // Migration 10: refresh session cost aggregates after the cost back-fill in migration 9.
+  // Sessions table stores denormalized cost_usd; re-sum from api_requests per session.
+  `
+  UPDATE sessions SET cost_usd = (
+    SELECT COALESCE(SUM(ar.cost_usd), 0)
+    FROM api_requests ar
+    WHERE ar.session_id = sessions.id
+      AND (ar.agent_id IS NULL OR ar.agent_id = sessions.id)
+  );
+  `,
 ];
