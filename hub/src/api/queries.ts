@@ -44,6 +44,7 @@ export interface SubagentRow {
   cache_read_tokens: number;
   cache_creation_tokens: number;
   api_request_count: number;
+  agent_type?: string | null;
 }
 
 export interface SessionWithSubagents extends SessionRow {
@@ -191,6 +192,7 @@ export function getSessionsWithSubagents(
         COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
         COALESCE(SUM(ar.cache_creation_tokens), 0) AS cache_creation_tokens,
         COUNT(DISTINCT ar.id) AS api_request_count,
+        s.agent_type,
         s.parent_session_id
       FROM sessions s
       LEFT JOIN api_requests ar ON ar.session_id = s.parent_session_id AND ar.agent_id = s.id
@@ -619,6 +621,7 @@ export interface SubagentSession {
   input_tokens: number;
   output_tokens: number;
   api_request_count: number;
+  agent_type?: string | null;
 }
 
 /**
@@ -639,7 +642,8 @@ export function getSubagentSessions(
         8), 0) AS cost_usd,
       COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
       COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
-      COUNT(DISTINCT ar.id) AS api_request_count
+      COUNT(DISTINCT ar.id) AS api_request_count,
+      s.agent_type
     FROM sessions s
     LEFT JOIN api_requests ar ON ar.session_id = ? AND ar.agent_id = s.id
     WHERE s.parent_session_id = ?

@@ -650,6 +650,7 @@ function renderSubagentsList(el, subagentSessions) {
       <thead>
         <tr>
           <th>Subagent</th>
+          <th>Type</th>
           <th>Model</th>
           <th>Cost</th>
           <th>Cost % of Parent</th>
@@ -662,9 +663,11 @@ function renderSubagentsList(el, subagentSessions) {
         ${subagentSessions.map(s => {
           const shortId = s.id.slice(0, 8);
           const shortModel = (s.model || 'unknown').split('/').pop() || 'unknown';
+          const agentType = s.agent_type || '—';
           return `
             <tr>
               <td>${escapeHtml(shortId)}</td>
+              <td>${escapeHtml(agentType)}</td>
               <td>${escapeHtml(shortModel)}</td>
               <td>${fmt$(s.cost_usd || 0)}</td>
               <td>${fmtPct(s.cost_usd || 0, totalCost)}</td>

@@ -126,4 +126,9 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE api_requests ADD COLUMN agent_id TEXT;
   CREATE INDEX IF NOT EXISTS idx_api_requests_agent ON api_requests(agent_id);
   `,
+
+  // Migration 7: add agent_type to sessions to track subagent type (e.g., "Explore", "code-reviewer")
+  `
+  ALTER TABLE sessions ADD COLUMN agent_type TEXT;
+  `,
 ];

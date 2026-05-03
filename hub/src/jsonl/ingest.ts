@@ -5,7 +5,8 @@ export function ingestJsonlEntries(
   db: Database.Database,
   entries: JsonlEntry[],
   machineId: string,
-  filePath?: string
+  filePath?: string,
+  sessionNames?: Map<string, string>
 ): void {
   const upsertMachine = db.prepare(`
     INSERT INTO machines (id, first_seen, last_seen) VALUES (?, ?, ?)
@@ -26,8 +27,12 @@ export function ingestJsonlEntries(
   `);
 
   const upsertSubagentSession = db.prepare(`
-    INSERT OR IGNORE INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts)
-    VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)
+    INSERT OR IGNORE INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts, agent_type)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+  `);
+
+  const updateSessionName = db.prepare(`
+    UPDATE sessions SET name = ? WHERE id = ? AND (name IS NULL OR name = '')
   `);
 
   const refreshSession = db.prepare(`
@@ -53,6 +58,7 @@ export function ingestJsonlEntries(
     const affectedSessions = new Set<string>();
     const subagentIds = new Set<string>();
     const subagentParents = new Map<string, string>(); // agentId -> sessionId (actual parent)
+    const subagentTypes = new Map<string, string>(); // agentId -> agentType
 
     // Extract metadata from first entry (all entries in a batch share the same project/parent)
     const project = entries.length > 0 ? extractProject(entries[0].cwd) : '';
@@ -66,6 +72,11 @@ export function ingestJsonlEntries(
       // Upsert session
       const startedAtMs = new Date(entry.timestamp).getTime();
       upsertSession.run(sessionId, machineId, entry.message?.model ?? 'unknown', startedAtMs, project, parentSessionId);
+
+      // Update session name if provided
+      if (entry.sessionName) {
+        updateSessionName.run(entry.sessionName, sessionId);
+      }
 
       // Insert api_request
       if (entry.message) {
@@ -92,10 +103,13 @@ export function ingestJsonlEntries(
         );
       }
 
-      // Collect subagent IDs and track their actual parent session
+      // Collect subagent IDs and track their actual parent session and type
       if (entry.agentId) {
         subagentIds.add(entry.agentId);
         subagentParents.set(entry.agentId, sessionId); // Link agentId to its actual parent sessionId
+        if (entry.agentType) {
+          subagentTypes.set(entry.agentId, entry.agentType); // Track agent type (e.g., "Explore", "code-reviewer")
+        }
       }
     }
 
@@ -104,7 +118,8 @@ export function ingestJsonlEntries(
       // Create subagent session if it doesn't exist
       // Link each subagent to the actual sessionId that spawned it, not the batch-level parentSessionId
       const actualParentSessionId = subagentParents.get(subagentId) ?? null;
-      upsertSubagentSession.run(subagentId, machineId, null, now, project, actualParentSessionId, now);
+      const agentType = subagentTypes.get(subagentId) ?? null;
+      upsertSubagentSession.run(subagentId, machineId, null, now, project, actualParentSessionId, now, agentType);
       affectedSessions.add(subagentId);
     }
 
@@ -123,6 +138,14 @@ export function ingestJsonlEntries(
   });
 
   tx(entries);
+
+  // Update session names from metadata
+  if (sessionNames && sessionNames.size > 0) {
+    const updateName = db.prepare("UPDATE sessions SET name = ? WHERE id = ? AND (name IS NULL OR name = '')");
+    for (const [sessionId, name] of sessionNames.entries()) {
+      updateName.run(name, sessionId);
+    }
+  }
 }
 
 /**
