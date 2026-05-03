@@ -61,6 +61,18 @@ describe('ingestLogPayload', () => {
     expect(session.cost_usd).toBeCloseTo(0.01267155);
   });
 
+  it('sets api_request_count on session after ingest', () => {
+    ingestLogPayload(db, parseLogsPayload(LOG_SAMPLE, 'test-machine'));
+    const session = db.prepare('SELECT api_request_count FROM sessions').get() as { api_request_count: number };
+    expect(session.api_request_count).toBe(1);
+  });
+
+  it('sets tool_call_count on session after ingest', () => {
+    ingestLogPayload(db, parseLogsPayload(LOG_SAMPLE, 'test-machine'));
+    const session = db.prepare('SELECT tool_call_count FROM sessions').get() as { tool_call_count: number };
+    expect(session.tool_call_count).toBe(1);
+  });
+
   it('is idempotent — ingesting the same payload twice does not duplicate rows', () => {
     const parsed = parseLogsPayload(LOG_SAMPLE, 'test-machine');
     ingestLogPayload(db, parsed);
@@ -122,6 +134,67 @@ describe('ingestJsonlEntries with subagents', () => {
     expect(subagentSession).toBeDefined();
     expect(subagentSession?.id).toBe(agentId);
     expect(subagentSession?.parent_session_id).toBe(parentSessionId);
+  });
+
+  it('stores agent_type on subagent session when provided', () => {
+    const parentSessionId = 'parent-agent-type';
+    const agentId = 'sub-explore';
+
+    const entries: JsonlEntry[] = [{
+      sessionId: parentSessionId,
+      agentId,
+      agentType: 'Explore',
+      timestamp: '2026-04-23T12:00:00.000Z',
+      cwd: '/test/project',
+      costUSD: 0.01,
+      message: { id: 'msg-at-1', model: 'claude-haiku', usage: { input_tokens: 50, output_tokens: 25 } }
+    } as JsonlEntry];
+
+    ingestJsonlEntries(db, entries, 'test-machine');
+
+    const row = db.prepare('SELECT agent_type FROM sessions WHERE id = ?')
+      .get(agentId) as Record<string, unknown> | undefined;
+    expect(row?.agent_type).toBe('Explore');
+  });
+
+  it('applies sessionNames map to session name column', () => {
+    const sessionId = 'named-session-1';
+    const entries: JsonlEntry[] = [{
+      sessionId,
+      timestamp: '2026-04-23T12:00:00.000Z',
+      cwd: '/test/project',
+      costUSD: 0.01,
+      message: { id: 'msg-sn-1', model: 'claude-sonnet', usage: { input_tokens: 100, output_tokens: 50 } }
+    } as JsonlEntry];
+
+    const sessionNames = new Map([[sessionId, 'My Named Session']]);
+    ingestJsonlEntries(db, entries, 'test-machine', undefined, sessionNames);
+
+    const row = db.prepare('SELECT name FROM sessions WHERE id = ?')
+      .get(sessionId) as Record<string, unknown> | undefined;
+    expect(row?.name).toBe('My Named Session');
+  });
+
+  it('does not overwrite an existing non-empty session name', () => {
+    const sessionId = 'pre-named-session';
+    const entries: JsonlEntry[] = [{
+      sessionId,
+      timestamp: '2026-04-23T12:00:00.000Z',
+      cwd: '/test/project',
+      costUSD: 0.01,
+      message: { id: 'msg-pre-1', model: 'claude-sonnet', usage: { input_tokens: 100, output_tokens: 50 } }
+    } as JsonlEntry];
+
+    // Set a name first
+    ingestJsonlEntries(db, entries, 'test-machine');
+    db.prepare('UPDATE sessions SET name = ? WHERE id = ?').run('Original Name', sessionId);
+
+    // Try to overwrite via sessionNames
+    ingestJsonlEntries(db, entries, 'test-machine', undefined, new Map([[sessionId, 'New Name']]));
+
+    const row = db.prepare('SELECT name FROM sessions WHERE id = ?')
+      .get(sessionId) as Record<string, unknown> | undefined;
+    expect(row?.name).toBe('Original Name');
   });
 });
 

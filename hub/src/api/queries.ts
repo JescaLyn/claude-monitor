@@ -132,8 +132,8 @@ export function getSessions(
       cache_read_tokens, cache_creation_tokens,
       parent_session_id,
       api_request_count, tool_call_count, last_event_ts
-    FROM sessions
-    WHERE parent_session_id IS NULL
+    FROM sessions s
+    WHERE s.parent_session_id IS NULL
     ORDER BY ${sortExpr} ${order}
     LIMIT ? OFFSET ?
   `).all(limit, offset) as SessionRow[];
@@ -182,11 +182,7 @@ export function getSessionsWithSubagents(
       SELECT
         s.id,
         (SELECT DISTINCT model FROM api_requests WHERE session_id = s.parent_session_id AND agent_id = s.id LIMIT 1) AS name,
-        COALESCE(ROUND(
-          (SELECT COALESCE(SUM(cost_usd), 0) FROM api_requests WHERE session_id = s.parent_session_id AND agent_id IS NULL) *
-          COUNT(DISTINCT ar.id) /
-          NULLIF((SELECT COUNT(*) FROM api_requests WHERE session_id = s.parent_session_id), 0),
-          8), 0) AS cost_usd,
+        COALESCE(NULLIF(COALESCE(SUM(ar.cost_usd), 0), 0), s.cost_usd, 0) AS cost_usd,
         COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
         COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
         COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
@@ -635,11 +631,7 @@ export function getSubagentSessions(
     SELECT
       s.id,
       (SELECT DISTINCT model FROM api_requests WHERE session_id = ? AND agent_id = s.id LIMIT 1) AS model,
-      COALESCE(ROUND(
-        (SELECT COALESCE(SUM(cost_usd), 0) FROM api_requests WHERE session_id = ?) *
-        COUNT(DISTINCT ar.id) /
-        NULLIF((SELECT COUNT(*) FROM api_requests WHERE session_id = ?), 0),
-        8), 0) AS cost_usd,
+      COALESCE(NULLIF(COALESCE(SUM(ar.cost_usd), 0), 0), s.cost_usd, 0) AS cost_usd,
       COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
       COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
       COUNT(DISTINCT ar.id) AS api_request_count,
@@ -649,7 +641,7 @@ export function getSubagentSessions(
     WHERE s.parent_session_id = ?
     GROUP BY s.id
     ORDER BY cost_usd DESC
-  `).all(parentSessionId, parentSessionId, parentSessionId, parentSessionId, parentSessionId) as SubagentSession[];
+  `).all(parentSessionId, parentSessionId, parentSessionId) as SubagentSession[];
 }
 
 /**

@@ -3,6 +3,12 @@ import Database from 'better-sqlite3';
 import { getSessionsWithSubagents } from '../src/api/queries.js';
 import { runMigrations } from '../src/db.js';
 
+function freshDb(): Database.Database {
+  const db = new Database(':memory:');
+  runMigrations(db);
+  return db;
+}
+
 describe('getSessionsWithSubagents', () => {
   let db: Database.Database;
 
@@ -104,5 +110,66 @@ describe('getSessionsWithSubagents', () => {
     const parent3 = result.find(r => r.id === 'parent-3');
     expect(parent3).toBeDefined();
     expect(parent3!.subagents).toHaveLength(0);
+  });
+});
+
+describe('getSessionsWithSubagents — agent_type and cost fallback', () => {
+  let db: Database.Database;
+
+  beforeAll(() => {
+    db = freshDb();
+
+    // Parent session
+    db.prepare(`
+      INSERT INTO sessions (id, machine_id, started_at, cost_usd, input_tokens,
+                           output_tokens, cache_read_tokens, cache_creation_tokens,
+                           api_request_count, tool_call_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('parent-at', 'mac', 2000000, 0.50, 10000, 1000, 0, 0, 1, 0);
+
+    db.prepare(`
+      INSERT INTO api_requests (id, session_id, ts, prompt_id, model, cost_usd,
+                               input_tokens, output_tokens, cache_read_tokens,
+                               cache_creation_tokens, agent_id, event_sequence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('req-at-1', 'parent-at', 2000000, 'p-at-1', 'claude-opus', 0.50, 10000, 1000, 0, 0, null, 0);
+
+    // Subagent session with agent_type set, cost stored in sessions.cost_usd only
+    // (simulates subagent JSONL processed first — no api_request in parent context)
+    db.prepare(`
+      INSERT INTO sessions (id, machine_id, started_at, parent_session_id,
+                           cost_usd, input_tokens, output_tokens, cache_read_tokens,
+                           cache_creation_tokens, api_request_count, tool_call_count,
+                           agent_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('subagent-at', 'mac', 2000000, 'parent-at', 0.30, 5000, 500, 0, 0, 3, 0, 'Explore');
+
+    // Subagent's own api_request stored under its own session_id (not in parent's context)
+    db.prepare(`
+      INSERT INTO api_requests (id, session_id, ts, prompt_id, model, cost_usd,
+                               input_tokens, output_tokens, cache_read_tokens,
+                               cache_creation_tokens, agent_id, event_sequence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('req-at-2', 'subagent-at', 2000000, 'p-at-2', 'claude-haiku', 0.30, 5000, 500, 0, 0, null, 0);
+  });
+
+  afterAll(() => { db.close(); });
+
+  it('returns agent_type on subagent row', () => {
+    const result = getSessionsWithSubagents(db, 50, 0, 'cost_usd', 'desc');
+    expect(result[0].subagents[0].agent_type).toBe('Explore');
+  });
+
+  it('falls back to s.cost_usd when no api_requests are attributed to the subagent in parent context', () => {
+    // req-at-2 is stored under session_id = subagent-at (not as agent_id in parent),
+    // so SUM(ar.cost_usd) via the agent_id JOIN is 0 — fallback to sessions.cost_usd = 0.30
+    const result = getSessionsWithSubagents(db, 50, 0, 'cost_usd', 'desc');
+    expect(result[0].subagents[0].cost_usd).toBe(0.30);
+  });
+
+  it('includes subagent costs in parent total regardless of which path stored them', () => {
+    // Parent total should include req-at-2 (session_id = subagent-at) via the OR condition
+    const result = getSessionsWithSubagents(db, 50, 0, 'cost_usd', 'desc');
+    expect(result[0].cost_usd).toBe(0.80);
   });
 });

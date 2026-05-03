@@ -43,7 +43,6 @@ export function parseFile(
 ): ParseResult {
   try {
     const stat = statSync(filePath);
-    const mtime = stat.mtimeMs.toString();
 
     // File hasn't grown since last parse
     if (stat.size <= fromOffset) {

@@ -36,7 +36,9 @@ export function ingestLogPayload(db: Database.Database, parsed: ParsedLogPayload
       input_tokens          = (SELECT COALESCE(SUM(input_tokens), 0)          FROM api_requests WHERE session_id = ?),
       output_tokens         = (SELECT COALESCE(SUM(output_tokens), 0)         FROM api_requests WHERE session_id = ?),
       cache_read_tokens     = (SELECT COALESCE(SUM(cache_read_tokens), 0)     FROM api_requests WHERE session_id = ?),
-      cache_creation_tokens = (SELECT COALESCE(SUM(cache_creation_tokens), 0) FROM api_requests WHERE session_id = ?)
+      cache_creation_tokens = (SELECT COALESCE(SUM(cache_creation_tokens), 0) FROM api_requests WHERE session_id = ?),
+      api_request_count     = (SELECT COUNT(*)                                FROM api_requests WHERE session_id = ?),
+      tool_call_count       = (SELECT COUNT(*)                                FROM tool_events   WHERE session_id = ?)
     WHERE id = ?
   `);
 
@@ -77,7 +79,7 @@ export function ingestLogPayload(db: Database.Database, parsed: ParsedLogPayload
       ...parsed.apiRequests.map(r => r.sessionId),
     ]);
     for (const sid of affected) {
-      refreshSession.run(sid, sid, sid, sid, sid, sid);
+      refreshSession.run(sid, sid, sid, sid, sid, sid, sid, sid);
     }
   });
 
