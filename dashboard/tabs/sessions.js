@@ -104,7 +104,7 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
               <td class="models-cell"><span class="models-list">Loading...</span></td>
               <td>${r.api_request_count}</td>
               <td>${r.tool_call_count}</td>
-              <td style="text-align: center;"><a href="/cost-analysis?session=${encodeURIComponent(r.id)}" class="details-link">→</a></td>
+              <td style="text-align: center;"><a href="/?tab=cost-analysis&session=${encodeURIComponent(r.id)}" class="details-link">→</a></td>
             </tr>
           `;
 
@@ -125,7 +125,7 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
                 <td class="models-cell"><span class="models-list">Loading...</span></td>
                 <td>${s.api_request_count}</td>
                 <td>—</td>
-                <td style="text-align: center;"><a href="/cost-analysis?session=${encodeURIComponent(s.id)}" class="details-link">→</a></td>
+                <td style="text-align: center;"><a href="/?tab=cost-analysis&session=${encodeURIComponent(s.id)}" class="details-link">→</a></td>
               </tr>
             `}).join('');
           }
