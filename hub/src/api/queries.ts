@@ -183,7 +183,7 @@ export function getSessionsWithSubagents(
     const allSubagents = db.prepare(`
       SELECT
         s.id,
-        (SELECT DISTINCT model FROM api_requests WHERE session_id = s.parent_session_id AND agent_id = s.id LIMIT 1) AS name,
+        s.name,
         COALESCE(NULLIF(COALESCE(SUM(ar.cost_usd), 0), 0), s.cost_usd, 0) AS cost_usd,
         COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
         COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
@@ -617,6 +617,7 @@ export function getTotalPollingCost(db: Database.Database, daysBack = 30): numbe
 
 export interface SubagentSession {
   id: string;
+  name?: string | null;
   model: string | null;
   cost_usd: number;
   input_tokens: number;
@@ -635,6 +636,7 @@ export function getSubagentSessions(
   return db.prepare(`
     SELECT
       s.id,
+      s.name,
       (SELECT DISTINCT model FROM api_requests WHERE session_id = ? AND agent_id = s.id LIMIT 1) AS model,
       COALESCE(NULLIF(COALESCE(SUM(ar.cost_usd), 0), 0), s.cost_usd, 0) AS cost_usd,
       COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,

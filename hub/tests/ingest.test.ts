@@ -9,7 +9,7 @@ import { parseMetricsPayload } from '../src/parser/metrics.js';
 import { ingestLogPayload, ingestMetricSnapshots } from '../src/ingest.js';
 import { ingestJsonlEntries } from '../src/jsonl/ingest.js';
 import type { OtelLogsPayload, OtelMetricsPayload } from '../src/types.js';
-import type { JsonlEntry } from '../src/jsonl/parser.js';
+import type { JsonlEntry, AsyncAgentLaunch } from '../src/jsonl/parser.js';
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../..');
 const LOG_SAMPLE = JSON.parse(
@@ -173,6 +173,25 @@ describe('ingestJsonlEntries with subagents', () => {
     const row = db.prepare('SELECT name FROM sessions WHERE id = ?')
       .get(sessionId) as Record<string, unknown> | undefined;
     expect(row?.name).toBe('My Named Session');
+  });
+
+  it('uses asyncAgentLaunches to name async subagent sessions from parent JSONL', () => {
+    const parentSessionId = 'parent-async-launch';
+    const agentId = 'async-hex-abc123';
+
+    // No entries needed — the launch itself creates the synthetic session
+    const launches: AsyncAgentLaunch[] = [{
+      agentId,
+      description: 'Scan batch 1 (8 repos for security vulnerabilities)',
+      parentSessionId,
+    }];
+
+    ingestJsonlEntries(db, [], 'test-machine', undefined, undefined, launches);
+
+    const row = db.prepare('SELECT name, parent_session_id FROM sessions WHERE id = ?')
+      .get(agentId) as Record<string, unknown> | undefined;
+    expect(row?.name).toBe('Scan batch 1 (8 repos for security vulnerabilities)');
+    expect(row?.parent_session_id).toBe(parentSessionId);
   });
 
   it('does not overwrite an existing non-empty session name', () => {

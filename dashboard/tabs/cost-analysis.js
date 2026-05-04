@@ -48,7 +48,11 @@ async function renderCostAnalysis(el, sessionId, subagentId, allSessions) {
           <label for="subagent-select">Subagent</label>
           <select id="subagent-select">
             <option value="">All Subagents</option>
-            ${subagentSessions.map(s => `<option value="${escapeHtml(s.id)}" ${s.id === subagentId ? 'selected' : ''}>${escapeHtml(s.model || s.id.slice(0, 8))}</option>`).join('')}
+            ${subagentSessions.map(s => {
+              const shortModel = (s.model || 'unknown').split('/').pop() || 'unknown';
+              const label = s.name || s.agent_type || `Untyped (${shortModel})`;
+              return `<option value="${escapeHtml(s.id)}" ${s.id === subagentId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+            }).join('')}
           </select>
         </div>
         ` : ''}
@@ -650,7 +654,6 @@ function renderSubagentsList(el, subagentSessions) {
       <thead>
         <tr>
           <th>Subagent</th>
-          <th>Type</th>
           <th>Model</th>
           <th>Cost</th>
           <th>Cost % of Parent</th>
@@ -661,12 +664,10 @@ function renderSubagentsList(el, subagentSessions) {
       </thead>
       <tbody>
         ${subagentSessions.map(s => {
-          const shortId = s.id.slice(0, 8);
           const shortModel = (s.model || 'unknown').split('/').pop() || 'unknown';
-          const agentType = s.agent_type || '—';
+          const agentType = s.name || s.agent_type || `Untyped (${shortModel})`;
           return `
             <tr>
-              <td>${escapeHtml(shortId)}</td>
               <td>${escapeHtml(agentType)}</td>
               <td>${escapeHtml(shortModel)}</td>
               <td>${fmt$(s.cost_usd || 0)}</td>

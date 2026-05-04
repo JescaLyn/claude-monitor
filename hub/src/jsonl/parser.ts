@@ -27,9 +27,16 @@ export interface ParseState {
   mtime: string;
 }
 
+export interface AsyncAgentLaunch {
+  agentId: string;
+  description: string;
+  parentSessionId: string;
+}
+
 export interface ParseResult {
   entries: JsonlEntry[];
-  sessionNames: Map<string, string>; // sessionId -> name
+  sessionNames: Map<string, string>;          // sessionId -> name
+  asyncAgentLaunches: AsyncAgentLaunch[];     // async TaskCreate launches with descriptions
   newOffset: number;
 }
 
@@ -46,7 +53,7 @@ export function parseFile(
 
     // File hasn't grown since last parse
     if (stat.size === fromOffset) {
-      return { entries: [], sessionNames: new Map(), newOffset: fromOffset };
+      return { entries: [], sessionNames: new Map(), asyncAgentLaunches: [], newOffset: fromOffset };
     }
 
     // File was truncated or replaced — reset offset to beginning
@@ -71,19 +78,36 @@ export function parseFile(
     // Deduplicate by message.id (last-write-wins for streaming)
     const entries = new Map<string, JsonlEntry>();
     const sessionNames = new Map<string, string>();
+    const asyncLaunches = new Map<string, AsyncAgentLaunch>(); // agentId -> launch info
 
     for (const line of lines) {
       if (!line.trim()) continue;
 
       try {
         const raw = JSON.parse(line);
+        const obj = raw as Record<string, unknown>;
 
         // Extract session name from custom-title metadata
-        if ((raw as Record<string, unknown>).type === 'custom-title' && (raw as Record<string, unknown>).customTitle) {
-          const sessionId = (raw as Record<string, unknown>).sessionId as string;
-          const customTitle = (raw as Record<string, unknown>).customTitle as string;
+        if (obj.type === 'custom-title' && obj.customTitle) {
+          const sessionId = obj.sessionId as string;
+          const customTitle = obj.customTitle as string;
           if (sessionId && customTitle) {
             sessionNames.set(sessionId, customTitle);
+          }
+        }
+
+        // Extract async agent launches (TaskCreate / RemoteTrigger).
+        // These entries have no token usage so normalizeEntry ignores them, but the
+        // description field is the only human-readable label for the spawned agent.
+        // We capture parentSessionId here so ingestJsonlEntries can create the
+        // synthetic session immediately without waiting for the subagent's own JSONL.
+        const tur = obj.toolUseResult as Record<string, unknown> | undefined;
+        if (tur && tur.isAsync === true && tur.status === 'async_launched') {
+          const agentId = tur.agentId as string | undefined;
+          const description = tur.description as string | undefined;
+          const parentSessionId = obj.sessionId as string | undefined;
+          if (agentId && description && parentSessionId) {
+            asyncLaunches.set(agentId, { agentId, description, parentSessionId });
           }
         }
 
@@ -101,12 +125,13 @@ export function parseFile(
     return {
       entries: Array.from(entries.values()),
       sessionNames,
+      asyncAgentLaunches: Array.from(asyncLaunches.values()),
       newOffset: stat.size,
     };
   } catch (err) {
     // Log file access errors; may indicate permission/disk issues
     console.error(`[jsonl-parser] Error reading ${filePath}:`, err instanceof Error ? err.message : String(err));
-    return { entries: [], sessionNames: new Map(), newOffset: fromOffset };
+    return { entries: [], sessionNames: new Map(), asyncAgentLaunches: [], newOffset: fromOffset };
   }
 }
 

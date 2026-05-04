@@ -1,12 +1,13 @@
 import type Database from 'better-sqlite3';
-import { JsonlEntry } from './parser.js';
+import { JsonlEntry, AsyncAgentLaunch } from './parser.js';
 
 export function ingestJsonlEntries(
   db: Database.Database,
   entries: JsonlEntry[],
   machineId: string,
   _filePath?: string,
-  sessionNames?: Map<string, string>
+  sessionNames?: Map<string, string>,
+  asyncAgentLaunches?: AsyncAgentLaunch[]
 ): void {
   const upsertMachine = db.prepare(`
     INSERT INTO machines (id, first_seen, last_seen) VALUES (?, ?, ?)
@@ -27,11 +28,12 @@ export function ingestJsonlEntries(
   `);
 
   const upsertSubagentSession = db.prepare(`
-    INSERT INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts, agent_type)
-    VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+    INSERT INTO sessions (id, machine_id, model, started_at, project, parent_session_id, api_request_count, tool_call_count, last_event_ts, agent_type, name)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       parent_session_id = COALESCE(sessions.parent_session_id, excluded.parent_session_id),
-      agent_type = COALESCE(sessions.agent_type, excluded.agent_type)
+      agent_type = COALESCE(sessions.agent_type, excluded.agent_type),
+      name = COALESCE(sessions.name, excluded.name)
   `);
 
   const updateSessionName = db.prepare(`
@@ -118,12 +120,22 @@ export function ingestJsonlEntries(
       }
     }
 
-    // Create synthetic subagent sessions from agentId entries
+    // Create synthetic subagent sessions from agentId entries (sync agents from subagent JSONLs)
     for (const subagentId of subagentIds) {
       const actualParentSessionId = subagentParents.get(subagentId) ?? null;
       const agentType = subagentTypes.get(subagentId) ?? null;
-      upsertSubagentSession.run(subagentId, machineId, null, now, project, actualParentSessionId, now, agentType);
+      upsertSubagentSession.run(subagentId, machineId, null, now, project, actualParentSessionId, now, agentType, null);
       affectedSessions.add(subagentId);
+    }
+
+    // Create synthetic subagent sessions from async launches in the parent JSONL.
+    // These carry the description ("Scan batch 1 (8 repos)") which is the only
+    // human-readable label available for TaskCreate/RemoteTrigger agents.
+    for (const launch of (asyncAgentLaunches ?? [])) {
+      upsertSubagentSession.run(launch.agentId, machineId, null, now, project, launch.parentSessionId, now, null, launch.description);
+      affectedSessions.add(launch.agentId);
+      subagentIds.add(launch.agentId);
+      subagentParents.set(launch.agentId, launch.parentSessionId);
     }
 
     // Refresh aggregates for all affected sessions (parent + subagents)

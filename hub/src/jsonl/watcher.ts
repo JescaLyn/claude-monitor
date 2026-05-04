@@ -112,13 +112,13 @@ function processFile(db: Database.Database, filePath: string, machineId: string)
     const state = parseStateMap[filePath];
     const fromOffset = state?.byteOffset ?? 0;
 
-    const { entries, sessionNames, newOffset } = parseFile(filePath, fromOffset);
+    const { entries, sessionNames, asyncAgentLaunches, newOffset } = parseFile(filePath, fromOffset);
 
-    if (entries.length > 0 || sessionNames.size > 0) {
+    if (entries.length > 0 || sessionNames.size > 0 || asyncAgentLaunches.length > 0) {
       if (entries.length > 0) {
         console.log(`[jsonl-watcher] Parsed ${entries.length} entries from ${filePath}`);
       }
-      ingestJsonlEntries(db, entries, machineId, filePath, sessionNames);
+      ingestJsonlEntries(db, entries, machineId, filePath, sessionNames, asyncAgentLaunches);
     }
 
     // Update parse state

@@ -1,6 +1,30 @@
 import { get, fmt$, fmtTokens, fmtDate, fmtDateNoSeconds, fmtDateParts, fmtDuration, escapeHtml } from '/utils.js';
 
 const expandedSessions = new Set();
+
+let _tip = null;
+function tip() {
+  if (!_tip) {
+    _tip = document.createElement('div');
+    _tip.style.cssText = 'position:fixed;background:#444;color:#fff;padding:5px 9px;border-radius:4px;font-size:12px;line-height:1.5;max-width:320px;white-space:normal;z-index:10000;box-shadow:0 2px 8px rgba(0,0,0,0.2);pointer-events:none;display:none;';
+    document.body.appendChild(_tip);
+  }
+  return _tip;
+}
+function showTip(e, text) {
+  const t = tip();
+  t.textContent = text;
+  t.style.display = 'block';
+  moveTip(e);
+}
+function moveTip(e) {
+  const t = tip();
+  const x = e.clientX + 14;
+  const y = e.clientY + 14;
+  t.style.left = (x + t.offsetWidth > window.innerWidth ? e.clientX - t.offsetWidth - 8 : x) + 'px';
+  t.style.top = y + 'px';
+}
+function hideTip() { tip().style.display = 'none'; }
 const LIMIT = 20;
 const DEFAULT_HOURS = 24;  // Default: show sessions active in the last 24 hours
 
@@ -111,11 +135,11 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
           // Add subagent rows (always render, hide by default)
           if (r.subagents && r.subagents.length > 0) {
             html += r.subagents.map(s => {
-              const label = s.agent_type || (s.name ? s.name.replace(/claude-/i, '').replace(/-\d{8}.*$/, '') : null) || s.id.slice(0, 8);
+              const label = s.name || s.agent_type || s.id.slice(0, 8);
               return `
-              <tr class="subagent-row" data-parent-id="${escapeHtml(r.id)}" data-id="${escapeHtml(s.id)}" style="background: #f9f9f9; display: ${isExpanded ? '' : 'none'};">
-                <td class="session-name" style="padding-left: 30px; font-size: 11px; color: #666;">
-                  └ ${escapeHtml(label)}
+              <tr class="subagent-row" data-parent-id="${escapeHtml(r.id)}" data-id="${escapeHtml(s.id)}" style="background: var(--bg-surface-alt); display: ${isExpanded ? '' : 'none'};">
+                <td class="session-name" style="padding-left: 30px; font-size: 11px;">
+                  └ <span data-tooltip="${escapeHtml(label)}">${escapeHtml(label)}</span>
                 </td>
                 <td class="td-center">—</td>
                 ${s.started_at ? dateCell(s.started_at, 'td-center') : '<td class="td-center">—</td>'}
@@ -293,6 +317,16 @@ export async function render(el) {
   // Attach persistent event listeners only once
   if (!listenersAttached) {
     el.addEventListener('click', (e) => handleTableClick(el, e));
+    el.addEventListener('mouseover', (e) => {
+      const t = e.target.closest('[data-tooltip]');
+      if (t) showTip(e, t.dataset.tooltip);
+    });
+    el.addEventListener('mousemove', (e) => {
+      if (_tip && _tip.style.display !== 'none') moveTip(e);
+    });
+    el.addEventListener('mouseout', (e) => {
+      if (e.target.closest('[data-tooltip]')) hideTip();
+    });
     el.addEventListener('change', (e) => {
       if (e.target.id === 'time-range-select') {
         const newHours = parseInt(e.target.value, 10);
