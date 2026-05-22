@@ -1,49 +1,19 @@
 /* Cost Analysis Dashboard Styling */
 
-/* Color Palette */
+/* Variables unique to this page (shared palette lives in style.css) */
 :root {
-  --bg-primary: #ffffff;
-  --bg-surface: #ffffff;
-  --bg-row-alt: rgba(129, 140, 248, 0.08);
-  --bg-row-hover: rgba(129, 140, 248, 0.15);
-  --bg-head: #f7fafc;
-  --bg-detail: #f7fafc;
-  --border-color: #e2e8f0;
-  --border-row: #f0f2f5;
-  --text-primary: #1a202c;
-  --text-muted: #718096;
-  --accent-blue: #3182ce;
-  --accent-blue-light: #ebf8ff;
   --accent-orange: #dd6b20;
   --accent-orange-light: #fffaf0;
   --accent-orange-border: #fed7aa;
-  --accent-green: #38a169;
-  --accent-purple: #805ad5;
-  --accent-red: #c53030;
   --cost-bar-bg: rgba(49, 130, 206, 0.08);
   --sortable-hover-bg: rgba(49, 130, 206, 0.05);
   --focus-ring: rgba(49, 130, 206, 0.1);
 }
 
 [data-theme="dark"] {
-  --bg-primary: #0f1117;
-  --bg-surface: #1e2236;
-  --bg-row-alt: #262c44;
-  --bg-row-hover: #2c3354;
-  --bg-head: #191c2a;
-  --bg-detail: #262c44;
-  --border-color: #2e3452;
-  --border-row: #262c44;
-  --text-primary: #c8d0e8;
-  --text-muted: #7d88a8;
-  --accent-blue: #818cf8;
-  --accent-blue-light: rgba(129, 140, 248, 0.12);
   --accent-orange: #e5a062;
   --accent-orange-light: rgba(229, 160, 98, 0.1);
   --accent-orange-border: rgba(229, 160, 98, 0.25);
-  --accent-green: #8bc38a;
-  --accent-purple: #b4a8f8;
-  --accent-red: #e06c75;
   --cost-bar-bg: rgba(129, 140, 248, 0.1);
   --sortable-hover-bg: rgba(129, 140, 248, 0.06);
   --focus-ring: rgba(129, 140, 248, 0.2);
