@@ -73,6 +73,12 @@ export interface CostByDay {
   api_request_count: number;
 }
 
+export interface CostRangeSummary {
+  total_cost_usd: number;
+  total_api_requests: number;
+  total_sessions: number;
+}
+
 export interface CostByModel {
   model: string;
   cost_usd: number;
@@ -101,7 +107,7 @@ export function getOverview(db: Database.Database): OverviewStats {
   `).get() as OverviewStats;
 }
 
-const VALID_SORT_FIELDS = new Set(['started_at', 'last_event_ts', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count']);
+const VALID_SORT_FIELDS = new Set(['started_at', 'last_event_ts', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count', 'name', 'input_tokens', 'output_tokens']);
 const VALID_ORDERS = new Set(['asc', 'desc']);
 
 // Qualify table-column sorts with alias to avoid ambiguity in the JOIN query.
@@ -113,6 +119,9 @@ const SORT_EXPR: Record<string, string> = {
   machine_id:        's.machine_id',
   tool_call_count:   'tool_call_count',
   api_request_count: 'api_request_count',
+  name:              'COALESCE(s.name, s.id)',
+  input_tokens:      'input_tokens',
+  output_tokens:     'output_tokens',
 };
 
 export function getSessions(
@@ -146,7 +155,8 @@ export function getSessionsWithSubagents(
   limit = 50,
   offset = 0,
   sort = 'last_event_ts',
-  order = 'desc'
+  order = 'desc',
+  since = 0  // microseconds timestamp; 0 = all time
 ): SessionWithSubagents[] {
   if (!VALID_SORT_FIELDS.has(sort)) throw new Error(`Invalid sort field: ${sort}`);
   if (!VALID_ORDERS.has(order)) throw new Error(`Invalid order: ${order}`);
@@ -171,9 +181,12 @@ export function getSessionsWithSubagents(
     )
     WHERE s.parent_session_id IS NULL
     GROUP BY s.id
+    HAVING
+      NOT (MAX(ar.ts) IS NULL AND COUNT(DISTINCT ar.id) = 0)
+      AND (? = 0 OR COALESCE(MAX(ar.ts), s.started_at) >= ?)
     ORDER BY ${sortExpr} ${order}
     LIMIT ? OFFSET ?
-  `).all(limit, offset) as Omit<SessionWithSubagents, 'subagents'>[];
+  `).all(since, since, limit, offset) as Omit<SessionWithSubagents, 'subagents'>[];
 
   // Fetch all subagents for all parents in one query (prevents N+1)
   const subagentsByParent: Record<string, SubagentRow[]> = {};
@@ -489,6 +502,17 @@ export function getCostByDay(db: Database.Database, days = 30): CostByDay[] {
     GROUP BY day
     ORDER BY day ASC
   `).all(days) as CostByDay[];
+}
+
+export function getCostRangeSummary(db: Database.Database, days = 30): CostRangeSummary {
+  return db.prepare(`
+    SELECT
+      COALESCE(SUM(cost_usd), 0)  AS total_cost_usd,
+      COUNT(*)                     AS total_api_requests,
+      COUNT(DISTINCT session_id)   AS total_sessions
+    FROM api_requests
+    WHERE ts >= (strftime('%s', 'now') - ? * 86400) * 1000000
+  `).get(days) as CostRangeSummary;
 }
 
 export function getCostByModel(db: Database.Database): CostByModel[] {

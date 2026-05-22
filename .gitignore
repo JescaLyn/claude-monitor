@@ -12,8 +12,10 @@ hub/data/
 hub/sessions.db
 
 # Temporary/cache directories
-.claude/
 .superpowers/
+
+# Claude config
+.claude/
 
 # Documentation drafts
 docs/superpowers/plans/

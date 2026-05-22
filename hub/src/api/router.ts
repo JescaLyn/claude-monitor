@@ -7,7 +7,7 @@ import {
   getSkillCostsWithRequests, getSubagentCostsWithRequests,
   getApiRequests, getSessionBreakdown, getModelBreakdownForSession,
   insertRateLimitSnapshots, getLatestRateLimits, getRateLimitsByMachine, getTotalPollingCost,
-  getSubagentSessions, getSkillInvocations, getSessionsWithSubagents,
+  getSubagentSessions, getSkillInvocations, getSessionsWithSubagents, getCostRangeSummary,
 } from './queries.js';
 import { resolveSessionName } from '../session-names.js';
 import type { SessionRow, RateLimitSnapshot } from './queries.js';
@@ -58,10 +58,11 @@ export function createApiRouter(db: Database.Database): Router {
     const offset = Math.max(isNaN(rawOffset) ? 0   : rawOffset, 0);
     const sort  = String(req.query.sort  ?? 'last_event_ts');
     const order = String(req.query.order ?? 'desc');
+    const since = parseInt(String(req.query.since ?? '0'), 10);
     if (!VALID_SORT_FIELDS.has(sort))  { res.status(400).json({ error: 'Invalid sort field' }); return; }
     if (!VALID_ORDERS.has(order))      { res.status(400).json({ error: 'Invalid order' }); return; }
     try {
-      const sessions = getSessionsWithSubagents(db, limit, offset, sort, order);
+      const sessions = getSessionsWithSubagents(db, limit, offset, sort, order, isNaN(since) ? 0 : since);
       res.json(sessions.map(enrichSessionWithName));
     } catch (err) {
       const error = err as any;
@@ -99,6 +100,12 @@ export function createApiRouter(db: Database.Database): Router {
     const rawDays = parseInt(String(req.query.days ?? '30'), 10);
     const days = Math.min(isNaN(rawDays) ? 30 : rawDays, 365);
     res.json(getCostByDay(db, days));
+  });
+
+  router.get('/cost/range-summary', (req, res) => {
+    const rawDays = parseInt(String(req.query.days ?? '30'), 10);
+    const days = Math.min(isNaN(rawDays) ? 30 : rawDays, 365);
+    res.json(getCostRangeSummary(db, days));
   });
 
   router.get('/cost/by-model', (_req, res) => {

@@ -73,12 +73,21 @@ function nameCell(row) {
   return `<td class="session-name mono muted" data-id="${escapeHtml(row.id)}" title="${escapeHtml(row.id)}">${escapeHtml(row.id)}</td>`;
 }
 
+function chevronIcon(isActive, order) {
+  if (isActive && order === 'asc') {
+    return `<svg class="chev chev-active" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 5L5 1L9 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+  if (isActive && order === 'desc') {
+    return `<svg class="chev chev-active" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+  return `<svg class="chev chev-idle" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3.5L5 1L9 3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 6.5L5 9L9 6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 function sortHeader(label, field, sort, order, thClass = '') {
   const isActive = sort === field;
-  const indicator = isActive ? (order === 'asc' ? ' ↑' : ' ↓') : '';
   const nextOrder = isActive && order === 'desc' ? 'asc' : 'desc';
   const cls = thClass ? ` class="${thClass}"` : '';
-  return `<th${cls}><button class="sort-btn" data-field="${field}" data-order="${nextOrder}">${label}${indicator}</button></th>`;
+  return `<th${cls}><button class="sort-btn" data-field="${field}" data-order="${nextOrder}">${label}${chevronIcon(isActive, order)}</button></th>`;
 }
 
 function dateCell(microseconds, tdClass = '') {
@@ -96,12 +105,13 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
     <table class="sessions-table">
       <thead>
         <tr>
-          <th>Name</th>
+          ${sortHeader('Name', 'name', sort, order)}
           ${sortHeader('Machine', 'machine_id', sort, order, 'th-center')}
           ${sortHeader('Started', 'started_at', sort, order, 'th-center')}
           ${sortHeader('Last Activity', 'last_event_ts', sort, order)}
           ${sortHeader('Cost', 'cost_usd', sort, order, 'th-center')}
-          <th class="tokens-header"><div class="tokens-header-title">Tokens</div><table class="inline-tokens-header"><tbody><tr><td class="token-in">IN</td><td class="token-out">OUT</td></tr></tbody></table></th>
+          ${sortHeader('Tokens In', 'input_tokens', sort, order, 'th-center')}
+          ${sortHeader('Tokens Out', 'output_tokens', sort, order, 'th-center')}
           <th class="models-header"><div class="models-header-title">Models</div><table class="inline-models-header"><tbody><tr><td class="model-name">Model</td><td class="model-requests">Req %</td><td class="model-cost">Cost %</td></tr></tbody></table></th>
           ${sortHeader('API Reqs', 'api_request_count', sort, order)}
           ${sortHeader('Tools', 'tool_call_count', sort, order, 'th-center')}
@@ -124,7 +134,8 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
               ${dateCell(r.started_at, 'td-center')}
               ${dateCell(r.last_event_ts)}
               <td class="td-center">${fmt$(r.cost_usd)}</td>
-              <td class="tokens-cell"><div class="token-row"><span class="token-in">${fmtTokens(r.input_tokens)}</span><span class="token-out">${fmtTokens(r.output_tokens)}</span></div></td>
+              <td class="td-center">${fmtTokens(r.input_tokens)}</td>
+              <td class="td-center">${fmtTokens(r.output_tokens)}</td>
               <td class="models-cell"><span class="models-list">Loading...</span></td>
               <td>${r.api_request_count}</td>
               <td>${r.tool_call_count}</td>
@@ -145,7 +156,8 @@ function buildTable(rows, offset, sort, order, totalCount = rows.length) {
                 ${s.started_at ? dateCell(s.started_at, 'td-center') : '<td class="td-center">—</td>'}
                 ${s.last_event_ts ? dateCell(s.last_event_ts) : '<td>—</td>'}
                 <td class="td-center">${fmt$(s.cost_usd)}</td>
-                <td class="tokens-cell"><div class="token-row"><span class="token-in">${fmtTokens(s.input_tokens)}</span><span class="token-out">${fmtTokens(s.output_tokens)}</span></div></td>
+                <td class="td-center">${fmtTokens(s.input_tokens)}</td>
+                <td class="td-center">${fmtTokens(s.output_tokens)}</td>
                 <td class="models-cell"><span class="models-list">Loading...</span></td>
                 <td>${s.api_request_count}</td>
                 <td>—</td>
@@ -216,14 +228,12 @@ async function loadModelsForSelection(el, selector, idExtractor) {
 }
 
 async function renderPage(el, offset, sort = 'last_event_ts', order = 'desc', hours = DEFAULT_HOURS) {
-  const allRows = await get(`/sessions/with-subagents?limit=200&offset=0&sort=${sort}&order=${order}`);
-  const threshold = getTimeThreshold(hours);
-  const filteredRows = allRows.filter(r => !r.last_event_ts || r.last_event_ts >= threshold);
+  const since = getTimeThreshold(hours);
+  const allRows = await get(`/sessions/with-subagents?limit=200&offset=0&sort=${sort}&order=${order}&since=${since}`);
 
-  // Re-apply pagination after filtering
-  const paginatedRows = filteredRows.slice(offset, offset + LIMIT);
+  const paginatedRows = allRows.slice(offset, offset + LIMIT);
 
-  el.innerHTML = buildFilterControl(hours) + buildTable(paginatedRows, offset, sort, order, filteredRows.length);
+  el.innerHTML = buildFilterControl(hours) + buildTable(paginatedRows, offset, sort, order, allRows.length);
 
   // Load model data for all rows (parent and subagent)
   loadModelsForSelection(el, '.session-row:not(.subagent-row)', r => r.dataset.id);

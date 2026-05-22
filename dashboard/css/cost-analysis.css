@@ -2,10 +2,10 @@
 
 /* Color Palette */
 :root {
-  --bg-primary: #f8f9fa;
+  --bg-primary: #ffffff;
   --bg-surface: #ffffff;
-  --bg-row-alt: #fafbfc;
-  --bg-row-hover: #f0f7ff;
+  --bg-row-alt: rgba(129, 140, 248, 0.08);
+  --bg-row-hover: rgba(129, 140, 248, 0.15);
   --bg-head: #f7fafc;
   --bg-detail: #f7fafc;
   --border-color: #e2e8f0;
@@ -26,27 +26,27 @@
 }
 
 [data-theme="dark"] {
-  --bg-primary: #1c1f26;
-  --bg-surface: #272b34;
-  --bg-row-alt: #242832;
-  --bg-row-hover: #2e3647;
-  --bg-head: #2d313b;
-  --bg-detail: #2d313b;
-  --border-color: #383d49;
-  --border-row: #2d313b;
-  --text-primary: #c9d1d9;
-  --text-muted: #8a93a3;
-  --accent-blue: #7aa2f7;
-  --accent-blue-light: rgba(122, 162, 247, 0.14);
+  --bg-primary: #0f1117;
+  --bg-surface: #1e2236;
+  --bg-row-alt: #262c44;
+  --bg-row-hover: #2c3354;
+  --bg-head: #191c2a;
+  --bg-detail: #262c44;
+  --border-color: #2e3452;
+  --border-row: #262c44;
+  --text-primary: #c8d0e8;
+  --text-muted: #7d88a8;
+  --accent-blue: #818cf8;
+  --accent-blue-light: rgba(129, 140, 248, 0.12);
   --accent-orange: #e5a062;
   --accent-orange-light: rgba(229, 160, 98, 0.1);
-  --accent-orange-border: rgba(229, 160, 98, 0.3);
-  --accent-green: #98c379;
-  --accent-purple: #c678dd;
+  --accent-orange-border: rgba(229, 160, 98, 0.25);
+  --accent-green: #8bc38a;
+  --accent-purple: #b4a8f8;
   --accent-red: #e06c75;
-  --cost-bar-bg: rgba(122, 162, 247, 0.12);
-  --sortable-hover-bg: rgba(122, 162, 247, 0.08);
-  --focus-ring: rgba(122, 162, 247, 0.22);
+  --cost-bar-bg: rgba(129, 140, 248, 0.1);
+  --sortable-hover-bg: rgba(129, 140, 248, 0.06);
+  --focus-ring: rgba(129, 140, 248, 0.2);
 }
 
 /* Cost Analysis Container */
@@ -412,6 +412,21 @@ th:last-child {
 .model-badge.opus {
   background: #cffafe;
   color: #164e63;
+}
+
+[data-theme="dark"] .model-badge.sonnet {
+  background: rgba(189, 147, 249, 0.15);
+  color: #c9a8f5;
+}
+
+[data-theme="dark"] .model-badge.haiku {
+  background: rgba(139, 195, 138, 0.15);
+  color: #8bc38a;
+}
+
+[data-theme="dark"] .model-badge.opus {
+  background: rgba(122, 162, 247, 0.15);
+  color: #7aa2f7;
 }
 
 /* Cost Bars - Visual comparison bars */
