@@ -15,8 +15,10 @@ export function ingestJsonlEntries(
   `);
 
   const upsertSession = db.prepare(`
-    INSERT OR IGNORE INTO sessions (id, machine_id, model, started_at, project, parent_session_id)
+    INSERT INTO sessions (id, machine_id, model, started_at, project, parent_session_id)
     VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      project = COALESCE(sessions.project, NULLIF(excluded.project, ''))
   `);
 
   const insertRequest = db.prepare(`
@@ -32,6 +34,7 @@ export function ingestJsonlEntries(
     VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       parent_session_id = COALESCE(sessions.parent_session_id, excluded.parent_session_id),
+      project = COALESCE(sessions.project, NULLIF(excluded.project, '')),
       agent_type = COALESCE(sessions.agent_type, excluded.agent_type),
       name = COALESCE(sessions.name, excluded.name)
   `);

@@ -5,9 +5,10 @@ import {
   getOverview, getSessions, getSession, getToolStats, getSkillStats,
   getCostByDay, getCostByModel, getCostByMachine, setSessionName,
   getSkillCostsWithRequests, getSubagentCostsWithRequests,
-  getApiRequests, getSessionBreakdown, getModelBreakdownForSession,
+  getApiRequests, getSessionBreakdown, getModelBreakdownForSession, getModelBreakdownForProject,
   insertRateLimitSnapshots, getLatestRateLimits, getRateLimitsByMachine, getTotalPollingCost,
   getSubagentSessions, getSkillInvocations, getSessionsWithSubagents, getCostRangeSummary,
+  getProjectCosts,
 } from './queries.js';
 import { resolveSessionName } from '../session-names.js';
 import type { SessionRow, RateLimitSnapshot } from './queries.js';
@@ -27,7 +28,7 @@ function enrichSessionWithName(session: SessionRow): SessionRow {
   return session;
 }
 
-const VALID_SORT_FIELDS = new Set(['started_at', 'last_event_ts', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count']);
+const VALID_SORT_FIELDS = new Set(['started_at', 'last_event_ts', 'cost_usd', 'machine_id', 'tool_call_count', 'api_request_count', 'input_tokens', 'output_tokens', 'name']);
 const VALID_ORDERS = new Set(['asc', 'desc']);
 
 export function createApiRouter(db: Database.Database): Router {
@@ -51,18 +52,30 @@ export function createApiRouter(db: Database.Database): Router {
     res.json(sessions.map(enrichSessionWithName));
   });
 
+  router.get('/sessions/projects', (req, res) => {
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    res.json(getProjectCosts(db, isNaN(since) ? 0 : since));
+  });
+
+  router.get('/sessions/projects/:project/models', (req, res) => {
+    const project = decodeURIComponent(req.params.project);
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    res.json(getModelBreakdownForProject(db, project, isNaN(since) ? 0 : since));
+  });
+
   router.get('/sessions/with-subagents', (req, res) => {
     const rawLimit  = parseInt(String(req.query.limit  ?? '50'), 10);
     const rawOffset = parseInt(String(req.query.offset ?? '0'),  10);
     const limit  = Math.min(isNaN(rawLimit)  ? 50  : rawLimit,  200);
     const offset = Math.max(isNaN(rawOffset) ? 0   : rawOffset, 0);
-    const sort  = String(req.query.sort  ?? 'last_event_ts');
-    const order = String(req.query.order ?? 'desc');
-    const since = parseInt(String(req.query.since ?? '0'), 10);
+    const sort    = String(req.query.sort    ?? 'last_event_ts');
+    const order   = String(req.query.order   ?? 'desc');
+    const project = String(req.query.project ?? '');
+    const since   = parseInt(String(req.query.since ?? '0'), 10);
     if (!VALID_SORT_FIELDS.has(sort))  { res.status(400).json({ error: 'Invalid sort field' }); return; }
     if (!VALID_ORDERS.has(order))      { res.status(400).json({ error: 'Invalid order' }); return; }
     try {
-      const sessions = getSessionsWithSubagents(db, limit, offset, sort, order, isNaN(since) ? 0 : since);
+      const sessions = getSessionsWithSubagents(db, limit, offset, sort, order, isNaN(since) ? 0 : since, project);
       res.json(sessions.map(enrichSessionWithName));
     } catch (err) {
       const error = err as any;

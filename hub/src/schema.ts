@@ -168,4 +168,9 @@ export const MIGRATIONS: string[] = [
       AND (ar.agent_id IS NULL OR ar.agent_id = sessions.id)
   );
   `,
+
+  // Migration 11: reset parse_state so all JSONL files are reprocessed from scratch.
+  // This allows the fixed upsertSession (now ON CONFLICT DO UPDATE project) to backfill
+  // the project field for sessions that were first created by the OTLP receiver without a cwd.
+  `DELETE FROM parse_state;`,
 ];

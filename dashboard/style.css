@@ -668,6 +668,86 @@ tbody td.td-center {
   background: var(--bg-hover);
 }
 
+/* Sessions view toggle */
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.toggle-btn:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Project header rows */
+.project-header-row td {
+  background: var(--bg-head);
+  border-top: 2px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 14px;
+}
+
+.project-header-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.project-session-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.project-header-row td.td-center {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Hide Machine and Started columns in project view until a project is expanded */
+.sessions-table.project-view .col-machine,
+.sessions-table.project-view .col-started {
+  display: none;
+}
+
+.sessions-table.project-view.has-expanded .col-machine,
+.sessions-table.project-view.has-expanded .col-started {
+  display: table-cell;
+}
+
+/* Sessions total row */
+.sessions-table tfoot .total-row td {
+  background: var(--bg-head);
+  border-top: 2px solid var(--border-color);
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 10px 14px;
+}
+
 /* Sessions Filter */
 .sessions-filter {
   display: flex;
@@ -704,6 +784,25 @@ tbody td.td-center {
   outline: none;
   border-color: var(--accent-color, #0066cc);
   box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-group-right {
+  margin-left: auto;
+}
+
+.filter-sep {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 4px;
+  flex-shrink: 0;
 }
 
 /* Chart */

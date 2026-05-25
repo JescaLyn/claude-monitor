@@ -22,6 +22,7 @@ export interface SessionRow {
   machine_id: string;
   name: string | null;
   model: string | null;
+  project: string | null;
   started_at: number;
   ended_at: number | null;
   last_event_ts: number | null;
@@ -77,6 +78,11 @@ export interface CostRangeSummary {
   total_cost_usd: number;
   total_api_requests: number;
   total_sessions: number;
+}
+
+export interface ProjectCost {
+  project: string;
+  cost_usd: number;
 }
 
 export interface CostByModel {
@@ -156,7 +162,8 @@ export function getSessionsWithSubagents(
   offset = 0,
   sort = 'last_event_ts',
   order = 'desc',
-  since = 0  // microseconds timestamp; 0 = all time
+  since = 0,   // microseconds timestamp; 0 = all time
+  project = '' // '' = all projects
 ): SessionWithSubagents[] {
   if (!VALID_SORT_FIELDS.has(sort)) throw new Error(`Invalid sort field: ${sort}`);
   if (!VALID_ORDERS.has(order)) throw new Error(`Invalid order: ${order}`);
@@ -165,7 +172,7 @@ export function getSessionsWithSubagents(
   // Fetch parent sessions (with aggregated totals including subagents)
   const parentSessions = db.prepare(`
     SELECT
-      s.id, s.machine_id, s.name, s.model, s.started_at, s.ended_at,
+      s.id, s.machine_id, s.name, s.model, s.project, s.started_at, s.ended_at,
       COALESCE(SUM(ar.cost_usd), 0) AS cost_usd,
       COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
       COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
@@ -180,13 +187,14 @@ export function getSessionsWithSubagents(
       SELECT id FROM sessions WHERE parent_session_id = s.id
     )
     WHERE s.parent_session_id IS NULL
+      AND (? = '' OR COALESCE(s.project, '') = ?)
     GROUP BY s.id
     HAVING
       NOT (MAX(ar.ts) IS NULL AND COUNT(DISTINCT ar.id) = 0)
       AND (? = 0 OR COALESCE(MAX(ar.ts), s.started_at) >= ?)
     ORDER BY ${sortExpr} ${order}
     LIMIT ? OFFSET ?
-  `).all(since, since, limit, offset) as Omit<SessionWithSubagents, 'subagents'>[];
+  `).all(project, project, since, since, limit, offset) as Omit<SessionWithSubagents, 'subagents'>[];
 
   // Fetch all subagents for all parents in one query (prevents N+1)
   const subagentsByParent: Record<string, SubagentRow[]> = {};
@@ -551,6 +559,25 @@ export interface ModelBreakdown {
   cache_creation_tokens: number;
 }
 
+export function getModelBreakdownForProject(db: Database.Database, project: string, since = 0): ModelBreakdown[] {
+  return db.prepare(`
+    SELECT
+      model,
+      COUNT(*) AS api_request_count,
+      COALESCE(SUM(cost_usd), 0) AS total_cost_usd,
+      COALESCE(SUM(input_tokens), 0) AS input_tokens,
+      COALESCE(SUM(output_tokens), 0) AS output_tokens,
+      COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+      COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
+    FROM api_requests
+    WHERE session_id IN (SELECT id FROM sessions WHERE project = ?)
+      AND model != '<synthetic>'
+      AND (? = 0 OR ts >= ?)
+    GROUP BY model
+    ORDER BY total_cost_usd DESC
+  `).all(project, since, since) as ModelBreakdown[];
+}
+
 export function getModelBreakdownForSession(db: Database.Database, sessionId: string): ModelBreakdown[] {
   return db.prepare(`
     SELECT
@@ -628,6 +655,22 @@ export function getRateLimitsByMachine(db: Database.Database, machineId: string,
     ORDER BY ts DESC
     LIMIT ?
   `).all(machineId, limit) as RateLimitSnapshot[];
+}
+
+export function getProjectCosts(db: Database.Database, since = 0): ProjectCost[] {
+  return db.prepare(`
+    SELECT
+      s.project,
+      COALESCE(SUM(CASE WHEN ? = 0 OR ar.ts >= ? THEN ar.cost_usd ELSE 0 END), 0) AS cost_usd
+    FROM sessions s
+    LEFT JOIN api_requests ar ON (ar.session_id = s.id OR ar.session_id IN (
+      SELECT id FROM sessions sub WHERE sub.parent_session_id = s.id
+    ))
+    WHERE s.parent_session_id IS NULL
+      AND s.project IS NOT NULL AND s.project != ''
+    GROUP BY s.project
+    ORDER BY cost_usd DESC, s.project ASC
+  `).all(since, since) as ProjectCost[];
 }
 
 export function getTotalPollingCost(db: Database.Database, daysBack = 30): number {
