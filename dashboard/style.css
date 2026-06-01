@@ -606,10 +606,6 @@ tbody td.td-center {
   border: 1px solid var(--border-color);
 }
 
-[data-theme="dark"] .sessions-filter {
-  border: 1px solid var(--border-color);
-}
-
 [data-theme="dark"] .sessions-filter select {
   background: #252d4a;
   color: var(--text-primary);
@@ -739,10 +735,15 @@ tbody td.td-center {
   display: table-cell;
 }
 
+/* Indent session names one level under their project header */
+.sessions-table.project-view .session-row .session-name {
+  padding-left: 28px;
+}
+
 /* Sessions total row */
-.sessions-table tfoot .total-row td {
+.sessions-table .total-row td {
   background: var(--bg-head);
-  border-top: 2px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
   font-weight: 600;
   color: var(--text-primary);
   padding: 10px 14px;
@@ -754,9 +755,7 @@ tbody td.td-center {
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
-  padding: 12px;
-  background: var(--bg-surface);
-  border-radius: 6px;
+  padding: 4px 0;
 }
 
 .sessions-filter label {

@@ -156,6 +156,49 @@ export function getSessions(
   `).all(limit, offset) as SessionRow[];
 }
 
+export interface AggregateSummary {
+  total_cost_usd: number;
+  total_api_requests: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_sessions: number;
+  total_tool_calls: number;
+}
+
+export function getAggregateSummary(
+  db: Database.Database,
+  since = 0,
+  project = ''
+): AggregateSummary {
+  return db.prepare(`
+    WITH matched_sessions AS (
+      SELECT DISTINCT COALESCE(ps.id, s.id) AS root_session_id
+      FROM api_requests ar
+      JOIN sessions s ON ar.session_id = s.id
+      LEFT JOIN sessions ps ON ps.id = s.parent_session_id
+      WHERE ar.model != '<synthetic>'
+        AND (? = 0 OR ar.ts >= ?)
+        AND (? = '' OR COALESCE(ps.project, s.project, '') = ?)
+    )
+    SELECT
+      COALESCE(SUM(ar.cost_usd), 0)             AS total_cost_usd,
+      COUNT(*)                                   AS total_api_requests,
+      COALESCE(SUM(ar.input_tokens), 0)          AS total_input_tokens,
+      COALESCE(SUM(ar.output_tokens), 0)         AS total_output_tokens,
+      COUNT(DISTINCT COALESCE(ps.id, s.id))      AS total_sessions,
+      COALESCE((
+        SELECT COUNT(*) FROM tool_events te
+        WHERE te.session_id IN (SELECT root_session_id FROM matched_sessions)
+      ), 0) AS total_tool_calls
+    FROM api_requests ar
+    JOIN sessions s ON ar.session_id = s.id
+    LEFT JOIN sessions ps ON ps.id = s.parent_session_id
+    WHERE ar.model != '<synthetic>'
+      AND (? = 0 OR ar.ts >= ?)
+      AND (? = '' OR COALESCE(ps.project, s.project, '') = ?)
+  `).get(since, since, project, project, since, since, project, project) as AggregateSummary;
+}
+
 export function getSessionsWithSubagents(
   db: Database.Database,
   limit = 50,
@@ -167,34 +210,36 @@ export function getSessionsWithSubagents(
 ): SessionWithSubagents[] {
   if (!VALID_SORT_FIELDS.has(sort)) throw new Error(`Invalid sort field: ${sort}`);
   if (!VALID_ORDERS.has(order)) throw new Error(`Invalid order: ${order}`);
-  const sortExpr = SORT_EXPR[sort];
+  // cost_usd sort uses the computed alias (period-filtered sum), not the denormalized s.cost_usd column
+  const sortExpr = sort === 'cost_usd' ? 'cost_usd' : SORT_EXPR[sort];
 
-  // Fetch parent sessions (with aggregated totals including subagents)
+  // CTE pre-filters api_requests to the selected period so all aggregates reflect period costs only
   const parentSessions = db.prepare(`
+    WITH period_reqs AS (
+      SELECT ar.* FROM api_requests ar WHERE ? = 0 OR ar.ts >= ?
+    )
     SELECT
       s.id, s.machine_id, s.name, s.model, s.project, s.started_at, s.ended_at,
-      COALESCE(SUM(ar.cost_usd), 0) AS cost_usd,
-      COALESCE(SUM(ar.input_tokens), 0) AS input_tokens,
-      COALESCE(SUM(ar.output_tokens), 0) AS output_tokens,
-      COALESCE(SUM(ar.cache_read_tokens), 0) AS cache_read_tokens,
-      COALESCE(SUM(ar.cache_creation_tokens), 0) AS cache_creation_tokens,
-      COUNT(DISTINCT ar.id) AS api_request_count,
+      COALESCE(SUM(pr.cost_usd), 0) AS cost_usd,
+      COALESCE(SUM(pr.input_tokens), 0) AS input_tokens,
+      COALESCE(SUM(pr.output_tokens), 0) AS output_tokens,
+      COALESCE(SUM(pr.cache_read_tokens), 0) AS cache_read_tokens,
+      COALESCE(SUM(pr.cache_creation_tokens), 0) AS cache_creation_tokens,
+      COUNT(DISTINCT pr.id) AS api_request_count,
       (SELECT COUNT(*) FROM tool_events WHERE session_id = s.id) AS tool_call_count,
-      MAX(ar.ts) AS last_event_ts,
+      MAX(pr.ts) AS last_event_ts,
       s.parent_session_id
     FROM sessions s
-    LEFT JOIN api_requests ar ON ar.session_id = s.id OR ar.session_id IN (
+    LEFT JOIN period_reqs pr ON pr.session_id = s.id OR pr.session_id IN (
       SELECT id FROM sessions WHERE parent_session_id = s.id
     )
     WHERE s.parent_session_id IS NULL
       AND (? = '' OR COALESCE(s.project, '') = ?)
     GROUP BY s.id
-    HAVING
-      NOT (MAX(ar.ts) IS NULL AND COUNT(DISTINCT ar.id) = 0)
-      AND (? = 0 OR COALESCE(MAX(ar.ts), s.started_at) >= ?)
+    HAVING COUNT(DISTINCT pr.id) > 0
     ORDER BY ${sortExpr} ${order}
     LIMIT ? OFFSET ?
-  `).all(project, project, since, since, limit, offset) as Omit<SessionWithSubagents, 'subagents'>[];
+  `).all(since, since, project, project, limit, offset) as Omit<SessionWithSubagents, 'subagents'>[];
 
   // Fetch all subagents for all parents in one query (prevents N+1)
   const subagentsByParent: Record<string, SubagentRow[]> = {};

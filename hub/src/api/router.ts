@@ -8,7 +8,7 @@ import {
   getApiRequests, getSessionBreakdown, getModelBreakdownForSession, getModelBreakdownForProject,
   insertRateLimitSnapshots, getLatestRateLimits, getRateLimitsByMachine, getTotalPollingCost,
   getSubagentSessions, getSkillInvocations, getSessionsWithSubagents, getCostRangeSummary,
-  getProjectCosts,
+  getProjectCosts, getAggregateSummary,
 } from './queries.js';
 import { resolveSessionName } from '../session-names.js';
 import type { SessionRow, RateLimitSnapshot } from './queries.js';
@@ -50,6 +50,12 @@ export function createApiRouter(db: Database.Database): Router {
     if (!VALID_ORDERS.has(order))      { res.status(400).json({ error: 'Invalid order' }); return; }
     const sessions = getSessions(db, limit, offset, sort, order);
     res.json(sessions.map(enrichSessionWithName));
+  });
+
+  router.get('/sessions/aggregate', (req, res) => {
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    const project = String(req.query.project ?? '');
+    res.json(getAggregateSummary(db, isNaN(since) ? 0 : since, project));
   });
 
   router.get('/sessions/projects', (req, res) => {
