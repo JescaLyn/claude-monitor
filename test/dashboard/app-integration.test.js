@@ -156,11 +156,11 @@ function testButtonPlacement() {
 }
 
 /**
- * Test: Total number of tabs is correct (3 tabs, not 8)
+ * Test: Total number of tabs is correct
  */
 function testTabCount() {
   const buttons = document.querySelectorAll('nav#tabs button');
-  const expectedCount = 3; // overview, sessions, cost-analysis
+  const expectedCount = 5; // overview, sessions, projects, cost-analysis, timeline
 
   if (buttons.length !== expectedCount) {
     throw new Error(`Expected ${expectedCount} tab buttons, found ${buttons.length}`);
