@@ -8,6 +8,6 @@ Understand where Claude usage (tokens, cost) is going — broken down by session
 
 ## Status
 
-In design phase. See `docs/design-notes.md` for current architecture decisions.
+Active development.
 
 ## Session Protocol: `standard`

@@ -7,7 +7,7 @@ import { parseMetricsPayload } from '../../src/parser/metrics.js';
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../../..');
 const SAMPLE = JSON.parse(
-  readFileSync(resolve(REPO_ROOT, 'docs/reference/real-payload-metrics-sample.json'), 'utf8')
+  readFileSync(resolve(REPO_ROOT, 'hub/tests/fixtures/real-payload-metrics-sample.json'), 'utf8')
 ) as OtelMetricsPayload;
 
 describe('parseMetricsPayload', () => {

@@ -54,10 +54,7 @@ cd /opt/claude-monitor/hub && npm ci && npm run build
 
 ### 1.3 Install Systemd Service
 
-Edit `hub/hub.service`:
-- Replace `User=jessica` with `User=claude-monitor`
-- Replace `/home/jessica/claude-monitor` paths with `/opt/claude-monitor`
-- Ensure `DB_PATH=/var/lib/claude-monitor/data/monitor.db`
+The service file is already configured for the default install paths. Copy it as-is:
 
 ```bash
 sudo cp hub/hub.service /etc/systemd/system/claude-monitor.service

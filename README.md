@@ -143,7 +143,7 @@ Edit `hub/src/schema.ts`, add a new migration string. The migration runner will 
 - [ ] ZeroTier: Hub and all clients authorized, stable IPs assigned
 - [ ] Hub: Node 20+ LTS, `git clone`, `npm ci && npm run build`
 - [ ] Hub: Service user created, `/var/lib/claude-monitor/data` writable
-- [ ] Hub: `hub/hub.service` installed, paths customized, `systemctl enable --now`
+- [ ] Hub: `hub/hub.service` installed as systemd service, `systemctl enable --now`
 - [ ] Hub: Firewall rules (ufw) restrict 3001/4318 to ZeroTier interface
 - [ ] Clients: `~/.claude/settings.json` configured with hub IP + `host.name`
 - [ ] Clients: Verified ZeroTier connectivity (`ping <hub-ip>`)
@@ -198,7 +198,6 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) § Troubleshooting for more.
 
 - **DEPLOYMENT.md** — Multi-machine setup guide
 - **CLAUDE.md** — Project architecture notes
-- **docs/design-notes.md** — Design decisions and future directions
 - **hub/hub.service** — Systemd service file
 - **hub/src/** — Hub implementation
 - **dashboard/** — Web dashboard (vanilla JS, Chart.js)

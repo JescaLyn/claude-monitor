@@ -17,8 +17,8 @@ hub/sessions.db
 # Claude config
 .claude/
 
-# Documentation drafts
-docs/superpowers/plans/
+# Documentation (internal notes, reference material, design docs)
+docs/
 
 # Logs
 logs/

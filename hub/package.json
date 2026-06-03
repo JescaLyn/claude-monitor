@@ -2,6 +2,12 @@
   "name": "claude-monitor-hub",
   "version": "0.1.0",
   "type": "module",
+  "author": "JescaLyn",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JescaLyn/claude-monitor.git"
+  },
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",

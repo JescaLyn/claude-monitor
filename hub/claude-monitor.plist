@@ -1,30 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- macOS LaunchAgent for running the claude-monitor hub as a background service.
+     Install: cp hub/claude-monitor.plist ~/Library/LaunchAgents/
+     After editing the paths below to match your setup:
+       launchctl load ~/Library/LaunchAgents/claude-monitor.plist
+     Unload: launchctl unload ~/Library/LaunchAgents/claude-monitor.plist -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
   <string>com.example.claude-monitor</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/user/.nvm/versions/node/v24.13.1/bin/npm</string>
+    <!-- Path to npm. Find yours with: which npm -->
+    <string>/usr/local/bin/npm</string>
     <string>start</string>
     <string>--prefix</string>
-    <string>/Users/user/Documents/Development/claude-monitor/hub</string>
+    <!-- Absolute path to the hub/ directory -->
+    <string>/path/to/claude-monitor/hub</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/user/Documents/Development/claude-monitor</string>
+  <!-- Absolute path to the repo root -->
+  <string>/path/to/claude-monitor</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/user/Library/Logs/claude-monitor.log</string>
+  <string>/tmp/claude-monitor.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/user/Library/Logs/claude-monitor.log</string>
+  <string>/tmp/claude-monitor.log</string>
   <key>EnvironmentVariables</key>
   <dict>
+    <!-- Add your node bin directory. Find with: dirname $(which node) -->
     <key>PATH</key>
-    <string>/Users/user/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
   </dict>
 </dict>
 </plist>

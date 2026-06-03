@@ -13,10 +13,10 @@ import type { JsonlEntry, AsyncAgentLaunch } from '../src/jsonl/parser.js';
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../..');
 const LOG_SAMPLE = JSON.parse(
-  readFileSync(resolve(REPO_ROOT, 'logs/payload_020218_841952_v1_logs.json'), 'utf8')
+  readFileSync(resolve(REPO_ROOT, 'hub/tests/fixtures/payload_logs.json'), 'utf8')
 ) as OtelLogsPayload;
 const METRICS_SAMPLE = JSON.parse(
-  readFileSync(resolve(REPO_ROOT, 'docs/reference/real-payload-metrics-sample.json'), 'utf8')
+  readFileSync(resolve(REPO_ROOT, 'hub/tests/fixtures/real-payload-metrics-sample.json'), 'utf8')
 ) as OtelMetricsPayload;
 
 function freshDb(): Database.Database {
