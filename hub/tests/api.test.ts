@@ -13,7 +13,7 @@ import type { OtelLogsPayload } from '../src/types.js';
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../..');
 const LOG_SAMPLE = JSON.parse(
-  readFileSync(resolve(REPO_ROOT, 'logs/payload_020218_841952_v1_logs.json'), 'utf8')
+  readFileSync(resolve(REPO_ROOT, 'hub/tests/fixtures/payload_logs.json'), 'utf8')
 ) as OtelLogsPayload;
 
 let db: Database.Database;
@@ -170,7 +170,7 @@ describe('GET /api/cost/by-machine', () => {
 
 describe('GET /api/cost/by-day', () => {
   it('returns cost grouped by day', async () => {
-    const res = await supertest(app).get('/api/cost/by-day');
+    const res = await supertest(app).get('/api/cost/by-day?days=365');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     // The sample data has 1 api_request, so we expect 1 day entry

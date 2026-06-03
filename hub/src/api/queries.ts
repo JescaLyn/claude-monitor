@@ -264,7 +264,6 @@ export function getSessionsWithSubagents(
       LEFT JOIN api_requests ar ON ar.session_id = s.parent_session_id AND ar.agent_id = s.id
       WHERE s.parent_session_id IN (${parentIds.map(() => '?').join(',')})
       GROUP BY s.id
-      HAVING COUNT(DISTINCT ar.id) > 0
     `).all(...parentIds) as (SubagentRow & { parent_session_id: string })[];
 
     // Group by parent_session_id

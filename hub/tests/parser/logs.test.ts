@@ -10,7 +10,7 @@ import { parseLogsPayload } from '../../src/parser/logs.js';
 // resolve(file, '../../../..') = repo root (4 levels up from the file path)
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../../..');
 const SAMPLE = JSON.parse(
-  readFileSync(resolve(REPO_ROOT, 'logs/payload_020218_841952_v1_logs.json'), 'utf8')
+  readFileSync(resolve(REPO_ROOT, 'hub/tests/fixtures/payload_logs.json'), 'utf8')
 ) as OtelLogsPayload;
 
 describe('parseLogsPayload', () => {
