@@ -1,6 +1,5 @@
 [Unit]
 Description=Claude Monitor Hub — receives telemetry from Claude Code clients
-Documentation=file:///opt/claude-monitor/DEPLOYMENT.md
 After=network.target
 
 [Service]
