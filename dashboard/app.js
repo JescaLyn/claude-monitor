@@ -1,8 +1,8 @@
-import { render as renderOverview } from '/tabs/overview.js';
-import { render as renderSessions } from '/tabs/sessions.js';
-import { render as renderProjects } from '/tabs/projects.js';
-import { render as renderCostAnalysis } from '/tabs/cost-analysis.js';
-import { render as renderTimeline } from '/tabs/timeline.js';
+import { render as renderOverview } from './tabs/overview.js';
+import { render as renderSessions } from './tabs/sessions.js';
+import { render as renderProjects } from './tabs/projects.js';
+import { render as renderCostAnalysis } from './tabs/cost-analysis.js';
+import { render as renderTimeline } from './tabs/timeline.js';
 
 const TABS = {
   overview: renderOverview,

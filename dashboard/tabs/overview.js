@@ -1,4 +1,4 @@
-import { get, fmt$, fmtTokens } from '/utils.js';
+import { get, fmt$, fmtTokens } from '../utils.js';
 
 export async function render(el) {
   const d = await get('/summary');

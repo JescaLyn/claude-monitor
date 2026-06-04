@@ -1,4 +1,4 @@
-import { get, fmt$ } from '/utils.js';
+import { get, fmt$ } from '../utils.js';
 
 const PERIODS = [
   { label: '7 days',   days: 7   },

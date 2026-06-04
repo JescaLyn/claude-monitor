@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "npm start --prefix hub",
-    "test": "node test/dashboard/app-integration.test.js && node test/dashboard/cost-analysis.test.js",
+    "test": "node test/dashboard/app-integration.test.js && node test/dashboard/cost-analysis.test.js && node test/dashboard/imports.test.js",
     "service:load": "launchctl load ~/Library/LaunchAgents/claude-monitor.plist",
     "service:unload": "launchctl unload ~/Library/LaunchAgents/claude-monitor.plist",
     "service:restart": "npm run service:unload && npm run service:load"

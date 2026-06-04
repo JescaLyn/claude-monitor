@@ -1,4 +1,4 @@
-import { get } from '/utils.js';
+import { get } from '../utils.js';
 import {
   getTimeThreshold,
   showTip, moveTip, hideTip,

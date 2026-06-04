@@ -87,7 +87,7 @@ async function testAppJSImportsUnified() {
   const appContent = fs.readFileSync(appPath, 'utf8');
 
   // Check for unified import
-  if (!appContent.includes("import { render as renderCostAnalysis } from '/tabs/cost-analysis.js'")) {
+  if (!appContent.includes("import { render as renderCostAnalysis } from './tabs/cost-analysis.js'")) {
     throw new Error('app.js does not import the unified cost-analysis module');
   }
 

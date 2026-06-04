@@ -1,4 +1,4 @@
-import { get, fmt$, fmtTokens, fmtDateParts, escapeHtml } from '/utils.js';
+import { get, fmt$, fmtTokens, fmtDateParts, escapeHtml } from '../utils.js';
 
 export const DEFAULT_HOURS = 24;
 export const LIMIT = 20;
