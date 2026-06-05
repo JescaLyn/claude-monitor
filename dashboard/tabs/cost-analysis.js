@@ -3,10 +3,11 @@ import { DEFAULT_HOURS, TIME_OPTIONS, getTimeThreshold } from '../shared/session
 
 let caState = { hours: DEFAULT_HOURS, project: '', session: '', subagent: null };
 let _allSessions = null;
+let _since = 0;  // anchored to the last refreshSessions() call; reused for all API calls that render
 
 async function refreshSessions() {
-  const since = getTimeThreshold(caState.hours);
-  _allSessions = await get(`/sessions/with-subagents?limit=200&since=${since}`);
+  _since = getTimeThreshold(caState.hours);
+  _allSessions = await get(`/sessions/with-subagents?limit=200&since=${_since}`);
 }
 
 export async function render(el) {
@@ -46,9 +47,11 @@ async function renderCostAnalysis(el) {
   const sessionId = caState.session;
   const subagentId = caState.subagent;
 
+  const since = _since;
+
   let subagentSessions = [];
   if (sessionId) {
-    try { subagentSessions = await get(`/sessions/${sessionId}/subagents`); }
+    try { subagentSessions = await get(`/sessions/${sessionId}/subagents?since=${since}`); }
     catch (e) { console.error(e); }
   }
   const hasSubagents = subagentSessions.length > 0;
@@ -100,7 +103,6 @@ async function renderCostAnalysis(el) {
   if (!sessionId) {
     el.innerHTML = `<div class="cost-analysis-container">${controlsHtml}<div id="aggregate-section"><p class="loading">Loading…</p></div></div>`;
     attachControlListeners(el);
-    const since = getTimeThreshold(caState.hours);
     const aggregateEl = el.querySelector('#aggregate-section');
     try {
       const summary = await get(`/sessions/aggregate?since=${since}&project=${encodeURIComponent(project)}`);
@@ -128,9 +130,9 @@ async function renderCostAnalysis(el) {
   try {
     const target = subagentId || sessionId;
     const [breakdown, modelsData, toolData] = await Promise.all([
-      get(`/sessions/${target}/breakdown`),
-      get(`/sessions/${target}/models`),
-      get(`/sessions/${target}/tools`).catch(() => []),
+      get(`/sessions/${target}/breakdown?since=${since}`),
+      get(`/sessions/${target}/models?since=${since}`),
+      get(`/sessions/${target}/tools?since=${since}`).catch(() => []),
     ]);
     skillCosts = breakdown.skill_costs || [];
     subagentCosts = breakdown.subagent_costs || {};
@@ -164,7 +166,7 @@ async function renderCostAnalysis(el) {
       <div id="tools-panel" class="tab-panel"></div>
     `;
     const skillsPanel = el.querySelector('#skills-panel');
-    if (skillsPanel) await renderSkillsTab(skillsPanel, skillCosts, sessionId);
+    if (skillsPanel) await renderSkillsTab(skillsPanel, skillCosts, sessionId, since);
     const agentsPanel = el.querySelector('#agents-panel');
     if (agentsPanel && hasSubagents && !subagentId) renderSubagentsList(agentsPanel, subagentSessions);
   }
@@ -180,7 +182,7 @@ async function renderCostAnalysis(el) {
       if (panel) {
         panel.classList.add('active');
         tabBtn.classList.add('active');
-        if (tabName === 'skills') renderSkillsTab(panel, skillCosts, sessionId);
+        if (tabName === 'skills') renderSkillsTab(panel, skillCosts, sessionId, since);
         else if (tabName === 'agents') renderSubagentsList(panel, subagentSessions);
         else if (tabName === 'requests') renderAPIRequestsTab(panel, apiRequests);
         else if (tabName === 'tools') renderToolsTab(panel, toolEvents);
@@ -300,7 +302,7 @@ async function renderModelsSection(el, models) {
   `;
 }
 
-export async function renderSkillsTab(el, skillCosts, sessionId) {
+export async function renderSkillsTab(el, skillCosts, sessionId, since = 0) {
   const costs = skillCosts.map(s => s.total_cost_usd || 0);
   const maxCost = costs.length > 0 ? Math.max(...costs) : 0;
   el.innerHTML = `
@@ -356,7 +358,7 @@ export async function renderSkillsTab(el, skillCosts, sessionId) {
           const placeholder = listContainer?.querySelector('.invocation-list-placeholder');
           if (placeholder) {
             try {
-              const invocations = await get(`/sessions/${sessionId}/skills/${encodeURIComponent(skillName)}/invocations`);
+              const invocations = await get(`/sessions/${sessionId}/skills/${encodeURIComponent(skillName)}/invocations?since=${since}`);
               renderSkillInvocationsList(listContainer, invocations, skillName);
             } catch (err) {
               console.error(`Error fetching invocations for ${skillName}:`, err);

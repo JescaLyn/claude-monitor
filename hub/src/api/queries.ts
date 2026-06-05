@@ -371,7 +371,7 @@ export function getSubagentCostsWithRequests(db: Database.Database): SubagentCos
   return result || { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 };
 }
 
-export function getSkillInvocations(db: Database.Database, skillName: string, sessionId: string): SkillInvocation[] {
+export function getSkillInvocations(db: Database.Database, skillName: string, sessionId: string, since = 0): SkillInvocation[] {
   return db.prepare(`
     SELECT
       te.skill_name,
@@ -385,11 +385,13 @@ export function getSkillInvocations(db: Database.Database, skillName: string, se
     LEFT JOIN api_requests ar ON (
       ar.session_id = te.session_id
       AND ar.prompt_id = te.prompt_id
+      AND (? = 0 OR ar.ts >= ?)
     )
     WHERE te.tool_name = 'Skill' AND te.skill_name = ? AND te.session_id = ?
+      AND (? = 0 OR te.ts >= ?)
     GROUP BY te.id
     ORDER BY te.ts DESC
-  `).all(skillName, sessionId) as SkillInvocation[];
+  `).all(since, since, skillName, sessionId, since, since) as SkillInvocation[];
 }
 
 export interface ApiRequestFilters {
@@ -461,7 +463,8 @@ export function getApiRequests(
 
 export function getSessionBreakdown(
   db: Database.Database,
-  sessionId: string
+  sessionId: string,
+  since = 0
 ): SessionToolBreakdown {
   // Get all skills in this session with their costs
   const skillCosts = db.prepare(`
@@ -480,11 +483,12 @@ export function getSessionBreakdown(
     LEFT JOIN api_requests ar ON (
       ar.session_id = te.session_id
       AND ar.prompt_id = te.prompt_id
+      AND (? = 0 OR ar.ts >= ?)
     )
     WHERE te.session_id = ? AND te.tool_name = 'Skill' AND te.skill_name IS NOT NULL
     GROUP BY te.skill_name
     ORDER BY total_cost_usd DESC
-  `).all(sessionId) as SkillCostBreakdown[];
+  `).all(since, since, sessionId) as SkillCostBreakdown[];
 
   // Get Agent costs in this session
   const agentResult = db.prepare(`
@@ -496,9 +500,10 @@ export function getSessionBreakdown(
     LEFT JOIN api_requests ar ON (
       ar.session_id = te.session_id
       AND ar.prompt_id = te.prompt_id
+      AND (? = 0 OR ar.ts >= ?)
     )
     WHERE te.session_id = ? AND te.tool_name = 'Agent'
-  `).get(sessionId) as SubagentCostBreakdown | undefined;
+  `).get(since, since, sessionId) as SubagentCostBreakdown | undefined;
 
   const subagentCosts = agentResult || { invocation_count: 0, api_request_count: 0, total_cost_usd: 0 };
 
@@ -517,9 +522,9 @@ export function getSessionBreakdown(
       ar.duration_ms,
       ar.is_fast_mode
     FROM api_requests ar
-    WHERE ar.session_id = ?
+    WHERE ar.session_id = ? AND (? = 0 OR ar.ts >= ?)
     ORDER BY ar.ts DESC
-  `).all(sessionId) as ApiRequestDetail[];
+  `).all(sessionId, since, since) as ApiRequestDetail[];
 
   // Calculate total context tokens and ratio for session
   const contextResult = db.prepare(`
@@ -527,8 +532,8 @@ export function getSessionBreakdown(
       COALESCE(SUM(ar.input_tokens), 0) AS total_context_tokens,
       SUM(ar.input_tokens) AS total_input_tokens
     FROM api_requests ar
-    WHERE ar.session_id = ?
-  `).get(sessionId) as { total_context_tokens: number; total_input_tokens: number } | undefined;
+    WHERE ar.session_id = ? AND (? = 0 OR ar.ts >= ?)
+  `).get(sessionId, since, since) as { total_context_tokens: number; total_input_tokens: number } | undefined;
 
   const totalContextTokens = contextResult?.total_context_tokens || 0;
   const totalInputTokens = contextResult?.total_input_tokens || 1;
@@ -622,7 +627,7 @@ export function getModelBreakdownForProject(db: Database.Database, project: stri
   `).all(project, since, since) as ModelBreakdown[];
 }
 
-export function getModelBreakdownForSession(db: Database.Database, sessionId: string): ModelBreakdown[] {
+export function getModelBreakdownForSession(db: Database.Database, sessionId: string, since = 0): ModelBreakdown[] {
   return db.prepare(`
     SELECT
       model,
@@ -633,10 +638,10 @@ export function getModelBreakdownForSession(db: Database.Database, sessionId: st
       COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
       COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
     FROM api_requests
-    WHERE session_id = ? AND model != '<synthetic>'
+    WHERE session_id = ? AND model != '<synthetic>' AND (? = 0 OR ts >= ?)
     GROUP BY model
     ORDER BY total_cost_usd DESC
-  `).all(sessionId) as ModelBreakdown[];
+  `).all(sessionId, since, since) as ModelBreakdown[];
 }
 
 export interface RateLimitSnapshot {
@@ -742,7 +747,8 @@ export interface SubagentSession {
  */
 export function getSubagentSessions(
   db: Database.Database,
-  parentSessionId: string
+  parentSessionId: string,
+  since = 0
 ): SubagentSession[] {
   return db.prepare(`
     SELECT
@@ -755,11 +761,11 @@ export function getSubagentSessions(
       COUNT(DISTINCT ar.id) AS api_request_count,
       s.agent_type
     FROM sessions s
-    LEFT JOIN api_requests ar ON ar.session_id = ? AND ar.agent_id = s.id
+    LEFT JOIN api_requests ar ON ar.session_id = ? AND ar.agent_id = s.id AND (? = 0 OR ar.ts >= ?)
     WHERE s.parent_session_id = ?
     GROUP BY s.id
     ORDER BY cost_usd DESC
-  `).all(parentSessionId, parentSessionId, parentSessionId) as SubagentSession[];
+  `).all(parentSessionId, parentSessionId, since, since, parentSessionId) as SubagentSession[];
 }
 
 /**

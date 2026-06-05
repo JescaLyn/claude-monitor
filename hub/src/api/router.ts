@@ -163,6 +163,8 @@ export function createApiRouter(db: Database.Database): Router {
 
   router.get('/sessions/:id/breakdown', (req, res) => {
     const sessionId = req.params.id;
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    const sinceSafe = isNaN(since) ? 0 : since;
     const session = getSession(db, sessionId);
 
     // If this is a subagent session, query the parent with agent_id filtering
@@ -173,24 +175,24 @@ export function createApiRouter(db: Database.Database): Router {
       // Just return API requests and basic counts
       const apiRequestCount = db.prepare(`
         SELECT COUNT(*) as count FROM api_requests ar
-        WHERE ar.session_id = ? AND ar.agent_id = ?
-      `).get(parentId, sessionId) as any;
+        WHERE ar.session_id = ? AND ar.agent_id = ? AND (? = 0 OR ar.ts >= ?)
+      `).get(parentId, sessionId, sinceSafe, sinceSafe) as any;
 
       const agentResult = db.prepare(`
         SELECT
           COUNT(*) AS api_request_count,
           COALESCE(SUM(ar.cost_usd), 0) AS total_cost_usd
         FROM api_requests ar
-        WHERE ar.session_id = ? AND ar.agent_id = ?
-      `).get(parentId, sessionId) as any;
+        WHERE ar.session_id = ? AND ar.agent_id = ? AND (? = 0 OR ar.ts >= ?)
+      `).get(parentId, sessionId, sinceSafe, sinceSafe) as any;
 
       const apiRequests = db.prepare(`
         SELECT ar.id, ar.ts, ar.session_id, ar.model, ar.input_tokens,
                ar.cache_read_tokens, ar.cache_creation_tokens, ar.output_tokens, ar.cost_usd, ar.duration_ms, ar.is_fast_mode
         FROM api_requests ar
-        WHERE ar.session_id = ? AND ar.agent_id = ?
+        WHERE ar.session_id = ? AND ar.agent_id = ? AND (? = 0 OR ar.ts >= ?)
         ORDER BY ar.ts DESC
-      `).all(parentId, sessionId) as any[];
+      `).all(parentId, sessionId, sinceSafe, sinceSafe) as any[];
 
       if (apiRequests.length === 0) {
         res.status(404).json({ error: 'session not found' });
@@ -213,7 +215,7 @@ export function createApiRouter(db: Database.Database): Router {
       return;
     }
 
-    const breakdown = getSessionBreakdown(db, sessionId);
+    const breakdown = getSessionBreakdown(db, sessionId, sinceSafe);
     if (!breakdown.api_requests || breakdown.api_requests.length === 0) {
       res.status(404).json({ error: 'session not found' });
       return;
@@ -223,6 +225,8 @@ export function createApiRouter(db: Database.Database): Router {
 
   router.get('/sessions/:id/models', (req, res) => {
     const sessionId = req.params.id;
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    const sinceSafe = isNaN(since) ? 0 : since;
     const session = getSession(db, sessionId);
 
     // If this is a subagent session, query the parent with agent_id filtering
@@ -237,15 +241,15 @@ export function createApiRouter(db: Database.Database): Router {
           COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
           COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
         FROM api_requests
-        WHERE session_id = ? AND agent_id = ? AND model != '<synthetic>'
+        WHERE session_id = ? AND agent_id = ? AND model != '<synthetic>' AND (? = 0 OR ts >= ?)
         GROUP BY model
         ORDER BY total_cost_usd DESC
-      `).all(session.parent_session_id, sessionId) as any;
+      `).all(session.parent_session_id, sessionId, sinceSafe, sinceSafe) as any;
       res.json(models);
       return;
     }
 
-    const models = getModelBreakdownForSession(db, sessionId);
+    const models = getModelBreakdownForSession(db, sessionId, sinceSafe);
     res.json(models);
   });
 
@@ -302,19 +306,25 @@ export function createApiRouter(db: Database.Database): Router {
 
   // Subagent session endpoints
   router.get('/sessions/:id/subagents', (req, res) => {
-    const subagents = getSubagentSessions(db, req.params.id);
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    const sinceSafe = isNaN(since) ? 0 : since;
+    const subagents = getSubagentSessions(db, req.params.id, sinceSafe);
     res.json(subagents);
   });
 
   // Skill invocations endpoint
   router.get('/sessions/:sessionId/skills/:skillName/invocations', (req, res) => {
     const { sessionId, skillName } = req.params;
-    const invocations = getSkillInvocations(db, decodeURIComponent(skillName), sessionId);
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    const sinceSafe = isNaN(since) ? 0 : since;
+    const invocations = getSkillInvocations(db, decodeURIComponent(skillName), sessionId, sinceSafe);
     res.json(invocations);
   });
 
   router.get('/sessions/:id/tools', (req, res) => {
     const sessionId = req.params.id;
+    const since = parseInt(String(req.query.since ?? '0'), 10);
+    const sinceSafe = isNaN(since) ? 0 : since;
     const tools = db.prepare(`
       SELECT
         te.tool_name,
@@ -328,11 +338,12 @@ export function createApiRouter(db: Database.Database): Router {
       LEFT JOIN api_requests ar ON (
         ar.session_id = te.session_id
         AND ar.prompt_id = te.prompt_id
+        AND (? = 0 OR ar.ts >= ?)
       )
-      WHERE te.session_id = ?
+      WHERE te.session_id = ? AND (? = 0 OR te.ts >= ?)
       GROUP BY te.tool_name
       ORDER BY total_cost_usd DESC
-    `).all(sessionId) as any[];
+    `).all(sinceSafe, sinceSafe, sessionId, sinceSafe, sinceSafe) as any[];
     res.json(tools);
   });
 
