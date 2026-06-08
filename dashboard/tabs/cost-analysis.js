@@ -1,5 +1,5 @@
 import { get, fmt$, fmtTokens, fmtDate, escapeHtml } from '../utils.js';
-import { DEFAULT_HOURS, TIME_OPTIONS, getTimeThreshold } from '../shared/session-table.js';
+import { DEFAULT_HOURS, TIME_OPTIONS, getTimeThreshold, getModelName, sortModelsByFamily } from '../shared/session-table.js';
 
 let caState = { hours: DEFAULT_HOURS, project: '', session: '', subagent: null };
 let _allSessions = null;
@@ -65,8 +65,7 @@ async function renderCostAnalysis(el) {
     subagentOptions = '<option value="">No subagents</option>';
   } else {
     subagentOptions += subagentSessions.map(s => {
-      const shortModel = (s.model || 'unknown').split('/').pop() || 'unknown';
-      const label = s.name || s.agent_type || `Untyped (${shortModel})`;
+      const label = s.name || s.agent_type || `Untyped (${getModelName(s.model)})`;
       return `<option value="${escapeHtml(s.id)}" ${s.id === subagentId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
     }).join('');
   }
@@ -263,8 +262,9 @@ async function renderModelsSection(el, models) {
     el.innerHTML = '<p class="empty">No API requests in this session.</p>';
     return;
   }
-  const sessionTotalCost = models.reduce((sum, m) => sum + (m.total_cost_usd || 0), 0);
-  const sessionTotalRequests = models.reduce((sum, m) => sum + (m.api_request_count || 0), 0);
+  const sorted = sortModelsByFamily(models);
+  const sessionTotalCost = sorted.reduce((sum, m) => sum + (m.total_cost_usd || 0), 0);
+  const sessionTotalRequests = sorted.reduce((sum, m) => sum + (m.api_request_count || 0), 0);
   const fmtPct = (part, total) => total > 0 ? `${((part / total) * 100).toFixed(1)}%` : '—';
   el.innerHTML = `
     <div class="models-breakdown">
@@ -282,11 +282,10 @@ async function renderModelsSection(el, models) {
           </tr>
         </thead>
         <tbody>
-          ${models.map(m => {
-            const shortModel = (m.model || 'unknown').split('/').pop() || 'unknown';
+          ${sorted.map(m => {
             return `
               <tr>
-                <td>${escapeHtml(shortModel)}</td>
+                <td>${escapeHtml(getModelName(m.model))}</td>
                 <td>${m.api_request_count}</td>
                 <td>${fmtPct(m.api_request_count || 0, sessionTotalRequests)}</td>
                 <td>${fmtTokens(m.input_tokens)}</td>
@@ -484,7 +483,7 @@ export function renderAPIRequestsTab(el, apiRequests) {
     tbody.innerHTML = sorted.map(req => {
       const costPercentage = maxCost > 0 ? (req.cost_usd / maxCost) * 100 : 0;
       const modelName = req.model || 'Unknown';
-      const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${escapeHtml(modelName)}</span>`;
+      const modelBadge = `<span class="model-badge ${getModelBadgeClass(modelName)}">${escapeHtml(getModelName(modelName))}</span>`;
       const fastModeIndicator = req.is_fast_mode ? '<span style="color: var(--accent-green); font-weight: 600;">Yes</span>' : 'No';
       return `
         <tr class="request-row" data-timestamp="${req.ts}">
@@ -612,12 +611,11 @@ function renderSubagentsList(el, subagentSessions) {
       </thead>
       <tbody>
         ${subagentSessions.map(s => {
-          const shortModel = (s.model || 'unknown').split('/').pop() || 'unknown';
-          const agentType = s.name || s.agent_type || `Untyped (${shortModel})`;
+          const agentType = s.name || s.agent_type || `Untyped (${getModelName(s.model)})`;
           return `
             <tr>
               <td>${escapeHtml(agentType)}</td>
-              <td>${escapeHtml(shortModel)}</td>
+              <td>${escapeHtml(getModelName(s.model))}</td>
               <td>${fmt$(s.cost_usd || 0)}</td>
               <td>${fmtPct(s.cost_usd || 0, totalCost)}</td>
               <td>${s.api_request_count || 0}</td>
@@ -712,3 +710,4 @@ function getModelBadgeClass(model) {
   if (lower.includes('opus')) return 'opus';
   return '';
 }
+

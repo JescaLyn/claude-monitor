@@ -26,12 +26,27 @@ export function simplifyMachineId(machineId) {
   return escapeHtml(hostname.charAt(0).toUpperCase() + hostname.slice(1));
 }
 
+const MODEL_FAMILY_ORDER = { opus: 0, sonnet: 1, haiku: 2 };
+export function sortModelsByFamily(models) {
+  const family = m => { const l = (m.model || '').toLowerCase(); for (const [f, o] of Object.entries(MODEL_FAMILY_ORDER)) { if (l.includes(f)) return o; } return 3; };
+  const version = m => {
+    const parts = (m.model || '').replace(/^claude-/, '').split('-').slice(1).filter(p => /^\d+$/.test(p) && p.length < 8);
+    return parts.length >= 2 ? parseInt(parts[0]) * 1000 + parseInt(parts[1]) : parts.length === 1 ? parseInt(parts[0]) * 1000 : 0;
+  };
+  return [...models].sort((a, b) => {
+    const fd = family(a) - family(b);
+    return fd !== 0 ? fd : version(b) - version(a);
+  });
+}
+
+// "claude-opus-4-8" → "Opus 4.8", "claude-haiku-4-5-20251001" → "Haiku 4.5"
 export function getModelName(fullModel) {
   if (!fullModel) return 'Unknown';
-  if (fullModel.includes('haiku')) return 'Haiku';
-  if (fullModel.includes('sonnet')) return 'Sonnet';
-  if (fullModel.includes('opus')) return 'Opus';
-  return fullModel.split('/').pop() || fullModel;
+  const bare = fullModel.split('/').pop() || fullModel;
+  const parts = bare.replace(/^claude-/, '').split('-');
+  const family = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+  const version = parts.slice(1).filter(p => /^\d+$/.test(p) && p.length < 8).slice(0, 2).join('.');
+  return version ? `${family} ${version}` : family;
 }
 
 // Shared tooltip — singleton across all tabs (only one tab visible at a time)
@@ -259,12 +274,13 @@ export async function loadModelsForSelection(el, selector, idExtractor) {
       if (models.length === 0) {
         modelsList.innerHTML = 'No API requests';
       } else {
-        const totalCost = models.reduce((sum, m) => sum + m.total_cost_usd, 0);
-        const totalRequests = models.reduce((sum, m) => sum + m.api_request_count, 0);
+        const sorted = sortModelsByFamily(models);
+        const totalCost = sorted.reduce((sum, m) => sum + m.total_cost_usd, 0);
+        const totalRequests = sorted.reduce((sum, m) => sum + m.api_request_count, 0);
         modelsList.innerHTML = `
           <table class="inline-models-table">
             <tbody>
-              ${models.map(m => {
+              ${sorted.map(m => {
                 const modelName = getModelName(m.model);
                 const costPct = totalCost > 0 ? ((m.total_cost_usd / totalCost) * 100).toFixed(1) : 0;
                 const reqPct = totalRequests > 0 ? ((m.api_request_count / totalRequests) * 100).toFixed(1) : 0;
@@ -298,12 +314,13 @@ export async function loadModelsForProjects(el, groups, since) {
       if (models.length === 0) {
         modelsList.innerHTML = 'No API requests';
       } else {
-        const totalCost = models.reduce((sum, m) => sum + m.total_cost_usd, 0);
-        const totalRequests = models.reduce((sum, m) => sum + m.api_request_count, 0);
+        const sorted = sortModelsByFamily(models);
+        const totalCost = sorted.reduce((sum, m) => sum + m.total_cost_usd, 0);
+        const totalRequests = sorted.reduce((sum, m) => sum + m.api_request_count, 0);
         modelsList.innerHTML = `
           <table class="inline-models-table">
             <tbody>
-              ${models.map(m => {
+              ${sorted.map(m => {
                 const modelName = getModelName(m.model);
                 const costPct = totalCost > 0 ? ((m.total_cost_usd / totalCost) * 100).toFixed(1) : 0;
                 const reqPct = totalRequests > 0 ? ((m.api_request_count / totalRequests) * 100).toFixed(1) : 0;
